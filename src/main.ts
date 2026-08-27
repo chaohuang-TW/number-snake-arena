@@ -34,4 +34,4 @@ if (urlParams.get('debug') === '1') {
     }
 }
 
-new Phaser.Game(config);
+(window as any).__PHASER_GAME__ = new Phaser.Game(config);

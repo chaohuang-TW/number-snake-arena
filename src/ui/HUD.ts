@@ -27,11 +27,7 @@ export class HUD {
         this.boostBarBg = scene.add.graphics().setScrollFactor(0).setDepth(200);
         this.boostBarFill = scene.add.graphics().setScrollFactor(0).setDepth(201);
         
-        // Boost button for mobile
-        if (scene.sys.game.device.input.touch) {
-            this.createBoostButton();
-        }
-        
+        this.createBoostButton();
         this.resize(scene.scale.gameSize);
     }
 
@@ -86,6 +82,14 @@ export class HUD {
             const by = gameSize.height - 80;
             this.boostButton.setPosition(bx, by);
             this.boostButtonText.setPosition(bx, by);
+            // Hide on desktop viewports
+            if (gameSize.width > 768) {
+                this.boostButton.setVisible(false);
+                this.boostButtonText.setVisible(false);
+            } else {
+                this.boostButton.setVisible(true);
+                this.boostButtonText.setVisible(true);
+            }
         }
     }
 }

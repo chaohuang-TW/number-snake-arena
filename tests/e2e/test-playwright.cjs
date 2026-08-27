@@ -49,9 +49,31 @@ const { chromium } = require('playwright');
         try {
             console.log(`\n=== Testing NORMAL URL Security ===`);
             await page.goto(baseUrl, { waitUntil: 'networkidle' });
+            await page.waitForTimeout(2000);
+            
+            let vpNormal = page.viewportSize();
+            await page.mouse.click(vpNormal.width / 2, vpNormal.height / 2 + 60); 
             await page.waitForTimeout(1000);
-            const debugExists = await page.evaluate(() => typeof window.__NUMBER_SNAKE_DEBUG__ !== 'undefined');
-            assert(!debugExists, 'Debug API must be undefined on normal URL');
+            
+            let pValNormal = await page.evaluate(() => {
+                let scene = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+                return scene.player.value;
+            });
+            
+            await page.keyboard.press('c');
+            await page.keyboard.press('C');
+            await page.keyboard.down('c');
+            await page.keyboard.up('c');
+            await page.waitForTimeout(500);
+            
+            let pValAfter = await page.evaluate(() => {
+                let scene = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+                return scene.player.value;
+            });
+            assert(pValNormal === pValAfter, `PlayerValue should not change on normal URL when pressing C, got ${pValAfter}`);
+            
+            let debugExists = await page.evaluate(() => typeof window.__NUMBER_SNAKE_DEBUG__ !== 'undefined');
+            assert(!debugExists, `Debug API must be undefined on normal URL`);
             
             console.log(`\n=== Testing DEBUG URL Gameplay ===`);
             await page.goto(baseUrl + '?debug=1', { waitUntil: 'networkidle' });
@@ -76,17 +98,16 @@ const { chromium } = require('playwright');
 
             // === TEST A: Core Eating ===
             console.log('\n--- Test A: Core Eating ---');
-            await page.evaluate(() => {
-                API.setPlayerValue(5);
-                API.setPlayerHP(3);
+            await page.evaluate(() => { 
+                API.getEnemies().length = 0; API.setPlayerValue(5); API.setPlayerHP(3); 
                 let pos = API.getPlayerPos();
                 let e = API.spawnEnemy(3, pos.x + 500, pos.y);
                 API.forceCollisionWithEnemy(API.getEnemies().indexOf(e));
             });
-            let pVal = await page.evaluate(() => API.getPlayerValue());
+            let pValA1 = await page.evaluate(() => API.getPlayerValue());
             let segments = await page.evaluate(() => API.getBodySegments());
             let enemiesLen = await page.evaluate(() => API.getEnemies().length);
-            assert(pVal === 8, `Player value should be 8, got ${pVal}`);
+            assert(pValA1 === 8, `Player value should be 8, got ${pValA1}`);
             assert(segments === 6, `Body segments should be 6, got ${segments}`);
             assert(enemiesLen === 0, `Enemy should be removed`);
 
@@ -100,15 +121,14 @@ const { chromium } = require('playwright');
                 let e = API.spawnEnemy(5, pos.x + 500, pos.y);
                 API.forceCollisionWithEnemy(API.getEnemies().indexOf(e));
             });
-            pVal = await page.evaluate(() => API.getPlayerValue());
-            let hp = await page.evaluate(() => API.getPlayerHP());
-            assert(pVal === 5, `Player value should remain 5, got ${pVal}`);
-            assert(hp === 2, `Player HP should be reduced to 2 by same size enemy, got ${hp}`);
+            let pValA2 = await page.evaluate(() => API.getPlayerValue());
+            let hpA2 = await page.evaluate(() => API.getPlayerHP());
+            assert(pValA2 === 5, `Player value should remain 5, got ${pValA2}`);
+            assert(hpA2 === 2, `Player HP should be reduced to 2 by same size enemy, got ${hpA2}`);
             
             await cleanEnemies();
-
             // === TEST B: Role Reversal ===
-            console.log('\n--- Test B: Role Reversal ---');
+            console.log('\\n--- Test B: Role Reversal ---');
             await page.evaluate(() => { API.restartGame(); });
             await page.waitForTimeout(1000);
             await page.evaluate(() => { window.API = window.__NUMBER_SNAKE_DEBUG__; window.API.stopSpawning(); });
@@ -141,7 +161,7 @@ const { chromium } = require('playwright');
 
 
             // === TEST C: Damage Boundaries ===
-            console.log('\n--- Test C: Damage Boundaries ---');
+            console.log('\\n--- Test C: Damage Boundaries ---');
             await page.waitForTimeout(1500);
             
             await page.evaluate(() => { 
@@ -183,7 +203,7 @@ const { chromium } = require('playwright');
             await cleanEnemies();
 
             // === TEST D: Boss Damage ===
-            console.log('\n--- Test D: Boss Damage ---');
+            console.log('\\n--- Test D: Boss Damage ---');
             await page.evaluate(() => { API.setPlayerValue(100); API.setPlayerHP(3); API.spawnBoss(); });
             await page.waitForTimeout(500);
             await page.evaluate(() => { API.forceCollisionWithBoss(); });
@@ -208,7 +228,7 @@ const { chromium } = require('playwright');
             await cleanEnemies();
 
             // === TEST E: Boss Reversal & Victory ===
-            console.log('\n--- Test E: Boss Reversal & Victory ---');
+            console.log('\\n--- Test E: Boss Reversal & Victory ---');
             await page.evaluate(() => { API.setPlayerValue(70); });
             await page.waitForTimeout(500);
             let bState = await page.evaluate(() => API.getBossState());
@@ -228,6 +248,8 @@ const { chromium } = require('playwright');
             await page.waitForTimeout(500);
             bState = await page.evaluate(() => API.getBossState());
             assert(bState === 'NONE', `Boss should be NONE (destroyed)`);
+            let gStateVict = await page.evaluate(() => API.getGameState());
+            assert(gStateVict === 'VICTORY', `Game state should be VICTORY, got ${gStateVict}`);
             
                 await page.evaluate(() => { API.restartGame(); });
             await page.waitForTimeout(1000);
@@ -236,7 +258,7 @@ const { chromium } = require('playwright');
 
             // === TEST G: Pause / Resume ===
             // === TEST F: Eat Assist & Early Game ===
-            console.log('\n--- Test F: Eat Assist & Early Game ---');
+            console.log('\\n--- Test F: Eat Assist & Early Game ---');
             await page.evaluate(() => { 
                 API.getEnemies().length = 0; API.setPlayerValue(20); API.setPlayerHP(3); 
                 let pos = API.getPlayerPos();
@@ -261,7 +283,7 @@ const { chromium } = require('playwright');
             await page.evaluate(() => { window.API = window.__NUMBER_SNAKE_DEBUG__; window.API.stopSpawning(); });
             await cleanEnemies();
 
-            console.log('\n--- Test G: Pause / Resume ---');
+            console.log('\\n--- Test G: Pause / Resume ---');
 
             await page.evaluate(() => { API.simulateVisibilityHidden(); });
             await page.waitForTimeout(500);
@@ -279,7 +301,7 @@ const { chromium } = require('playwright');
             assert(gState === 'RUNNING', `Game should be RUNNING after RESUME click`);
 
             // === TEST H: Restart Listener Safety ===
-            console.log('\n--- Test H: Restart Listener Safety ---');
+            console.log('\\n--- Test H: Restart Listener Safety ---');
             let initialListeners = await page.evaluate(() => API.getResizeListenerCount());
             for (let i = 0; i < 10; i++) {
                 await page.evaluate(() => { API.setPlayerHP(0); API.setPlayerValue(10); let e = API.spawnEnemy(25, 0, 0); API.forceCollisionWithEnemy(API.getEnemies().indexOf(e)); });
@@ -291,7 +313,101 @@ const { chromium } = require('playwright');
             let finalListeners = await page.evaluate(() => API.getResizeListenerCount());
             assert(initialListeners === finalListeners, `Listener count should not increase. Initial: ${initialListeners}, Final: ${finalListeners}`);
 
-            console.log('\n--- Responsive Check ---');
+
+            // === TEST I: Combo Timeout ===
+            console.log('\\n--- Test I: Combo Timeout ---');
+            await page.evaluate(() => { API.restartGame(); });
+            await page.waitForTimeout(1000);
+            await page.evaluate(() => { window.API = window.__NUMBER_SNAKE_DEBUG__; window.API.stopSpawning(); });
+            await page.evaluate(() => { 
+                API.getEnemies().length = 0; API.setPlayerValue(5); 
+                let pos = API.getPlayerPos();
+                let e = API.spawnEnemy(1, pos.x, pos.y); 
+                API.forceCollisionWithEnemy(API.getEnemies().indexOf(e)); 
+            });
+            let combo1 = await page.evaluate(() => window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene').comboCount);
+            assert(combo1 === 1, `Combo should be 1, got ${combo1}`);
+            
+            await page.waitForTimeout(2600); // Wait for combo timeout
+            await page.evaluate(() => { 
+                let pos = API.getPlayerPos();
+                let e = API.spawnEnemy(1, pos.x, pos.y); 
+                API.forceCollisionWithEnemy(API.getEnemies().indexOf(e)); 
+            });
+            let combo2 = await page.evaluate(() => window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene').comboCount);
+            assert(combo2 === 1, `Combo should restart at 1, got ${combo2}`);
+
+
+            // === TEST J: Real Keyboard Control E2E ===
+            console.log('\\n--- Test J: Real Keyboard Control ---');
+            await page.evaluate(() => { API.restartGame(); });
+            await page.waitForTimeout(1000);
+            await page.evaluate(() => { window.API = window.__NUMBER_SNAKE_DEBUG__; window.API.stopSpawning(); });
+            
+            // Check W (Up)
+            await page.keyboard.down('w');
+            await page.waitForTimeout(200);
+            let targetAngle = await page.evaluate(() => API.getTargetAngle());
+            // Up is roughly -PI/2 (-1.57)
+            assert(targetAngle < -1.0 && targetAngle > -2.0, `Target angle should be UP (~-1.57), got ${targetAngle}`);
+            await page.keyboard.up('w');
+
+            // Check D (Right)
+            await page.keyboard.down('d');
+            await page.waitForTimeout(200);
+            targetAngle = await page.evaluate(() => API.getTargetAngle());
+            assert(targetAngle === 0, `Target angle should be RIGHT (0), got ${targetAngle}`);
+            await page.keyboard.up('d');
+            
+            // Check ArrowDown
+            await page.keyboard.down('ArrowDown');
+            await page.waitForTimeout(200);
+            targetAngle = await page.evaluate(() => API.getTargetAngle());
+            assert(targetAngle > 1.0 && targetAngle < 2.0, `Target angle should be DOWN (~1.57), got ${targetAngle}`);
+            await page.keyboard.up('ArrowDown');
+            
+            // Check ArrowLeft
+            await page.keyboard.down('ArrowLeft');
+            await page.waitForTimeout(200);
+            targetAngle = await page.evaluate(() => API.getTargetAngle());
+            assert(targetAngle === Math.PI || targetAngle === -Math.PI, `Target angle should be LEFT (PI), got ${targetAngle}`);
+            await page.keyboard.up('ArrowLeft');
+
+            // === TEST K: Real Mobile Boost E2E ===
+            console.log('\\n--- Test K: Mobile Boost ---');
+            await page.setViewportSize({ width: 390, height: 844 });
+            await page.waitForTimeout(1000);
+            await page.evaluate(() => { API.restartGame(); });
+            await page.waitForTimeout(1000);
+            await page.evaluate(() => { window.API = window.__NUMBER_SNAKE_DEBUG__; window.API.stopSpawning(); });
+            
+            let initialBoost = await page.evaluate(() => API.getBoostEnergy());
+            
+            // Touch BOOST button (bottom right)
+            await page.mouse.move(390 - 70, 844 - 70);
+            await page.mouse.down();
+            await page.waitForTimeout(600);
+            let afterBoost = await page.evaluate(() => API.getBoostEnergy());
+            assert(afterBoost < initialBoost, `Boost energy should decrease, got ${afterBoost} < ${initialBoost}`);
+            await page.mouse.up();
+            await page.waitForTimeout(600);
+            let recoveringBoost = await page.evaluate(() => API.getBoostEnergy());
+            assert(recoveringBoost > afterBoost, `Boost energy should recover, got ${recoveringBoost} > ${afterBoost}`);
+
+            // === TEST L: Real Virtual Joystick E2E ===
+            console.log('\\n--- Test L: Virtual Joystick ---');
+            // Joystick center is at 80, height - 80. Viewport 390x844 -> 80, 764
+            // Let's press at center, drag UP (to y=664)
+            await page.mouse.move(80, 764);
+            await page.mouse.down();
+            await page.mouse.move(80, 664, { steps: 5 });
+            await page.waitForTimeout(200);
+            
+            targetAngle = await page.evaluate(() => API.getTargetAngle());
+            assert(targetAngle < -1.0 && targetAngle > -2.0, `Joystick drag UP should set target angle to ~-1.57, got ${targetAngle}`);
+            await page.mouse.up();
+
+            console.log('\\n--- Responsive Check ---');
             const viewports = [
                 { width: 390, height: 844 },
                 { width: 430, height: 932 },
@@ -303,6 +419,40 @@ const { chromium } = require('playwright');
             for (const v of viewports) {
                 await page.setViewportSize(v);
                 await page.waitForTimeout(500);
+                
+                // Assert canvas bounds
+                const canvasBounds = await page.evaluate(() => {
+                    const c = document.querySelector('canvas');
+                    if (!c) return null;
+                    return { w: c.width, h: c.height, cw: c.clientWidth, ch: c.clientHeight };
+                });
+                assert(canvasBounds !== null, `Canvas missing at ${v.width}x${v.height}`);
+                assert(canvasBounds.cw <= v.width, `Canvas overflows horizontally at ${v.width}x${v.height}`);
+                
+                // If mobile size, test Joystick and Boost
+                if (v.width <= 768) {
+                    await page.evaluate(() => { API.restartGame(); });
+                    await page.waitForTimeout(1000);
+                    await page.evaluate(() => { window.API = window.__NUMBER_SNAKE_DEBUG__; window.API.stopSpawning(); });
+                    
+                    // BOOST test
+                    let initialBoost = await page.evaluate(() => API.getBoostEnergy());
+                    await page.mouse.move(v.width - 70, v.height - 70);
+                    await page.mouse.down();
+                    await page.waitForTimeout(600);
+                    let afterBoost = await page.evaluate(() => API.getBoostEnergy());
+                    assert(afterBoost < initialBoost, `Boost energy should decrease on ${v.width}x${v.height}, got ${afterBoost}`);
+                    await page.mouse.up();
+                    
+                    // Joystick test (move RIGHT)
+                    await page.mouse.move(80, v.height - 80);
+                    await page.mouse.down();
+                    await page.mouse.move(180, v.height - 80, { steps: 5 });
+                    await page.waitForTimeout(200);
+                    let targetAngle = await page.evaluate(() => API.getTargetAngle());
+                    assert(targetAngle === 0, `Joystick should steer RIGHT on ${v.width}x${v.height}, got ${targetAngle}`);
+                    await page.mouse.up();
+                }
             }
             console.log('✅ Responsive OK');
 

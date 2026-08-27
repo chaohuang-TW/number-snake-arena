@@ -28,7 +28,7 @@ Play the game now: [https://chaohuang-TW.github.io/number-snake-arena/](https://
 ## Development
 
 Built with:
-- [Phaser 3.80+](https://phaser.io/)
+- [Phaser 4.2.1](https://phaser.io/)
 - [Vite](https://vitejs.dev/)
 - [TypeScript](https://www.typescriptlang.org/)
 - Web Audio API (Synthesized SFX)

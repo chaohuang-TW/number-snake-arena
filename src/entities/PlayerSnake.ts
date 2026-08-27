@@ -25,7 +25,7 @@ export class PlayerSnake {
     isInvulnerable: boolean = false;
     isStunned: boolean = false;
     
-    private targetAngle: number = 0;
+    public targetAngle: number = 0;
 
     constructor(scene: Phaser.Scene, x: number, y: number) {
         this.scene = scene;

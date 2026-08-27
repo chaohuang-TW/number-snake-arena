@@ -62,6 +62,8 @@ export class GameScene extends Phaser.Scene {
         this.lastEdibleCheckTime = this.time.now;
 
         // World setup
+        
+        
         const ww = GameBalance.world.width;
         const wh = GameBalance.world.height;
         this.physics.world.setBounds(-ww/2, -wh/2, ww, wh);
@@ -98,6 +100,11 @@ export class GameScene extends Phaser.Scene {
                 getPlayerHP: () => this.player.hp,
                 setPlayerHP: (val: number) => { this.player.hp = val; this.player.isInvulnerable = false; },
                 getBodySegments: () => this.player.segments,
+                getPlayerPosition: () => ({ x: this.player.head.x, y: this.player.head.y }),
+                getCurrentAngle: () => this.player.head.rotation,
+                getTargetAngle: () => this.player.targetAngle,
+                getBoostEnergy: () => this.player.boostEnergy,
+
                 spawnEnemy: (val: number, x: number, y: number) => {
                     const e = new NumberEnemy(this, x, y, val);
                     this.enemies.push(e);
@@ -148,7 +155,19 @@ export class GameScene extends Phaser.Scene {
         this.events.on('shutdown', this.teardown, this);
 
         // Initial spawn
-        for (let i=0; i<20; i++) this.spawnEnemy();
+        
+        
+        for (let i=0; i<6; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = 240 + Math.random() * 200;
+            const sx = Phaser.Math.Clamp(Math.cos(angle) * dist, -ww/2+50, ww/2-50);
+            const sy = Phaser.Math.Clamp(Math.sin(angle) * dist, -wh/2+50, wh/2-50);
+            const val = Phaser.Math.Between(1, 4);
+            const enemy = new NumberEnemy(this, sx, sy, val);
+            this.enemies.push(enemy);
+        }
+        for (let i=0; i<14; i++) this.spawnEnemy();
+
     }
 
     handleVisibilityChange = () => {
@@ -163,11 +182,36 @@ export class GameScene extends Phaser.Scene {
     update(time: number, dt: number) {
         if (this.gameState === 'GAME_OVER' || this.gameState === 'VICTORY') return;
 
+        let dx = 0;
+        let dy = 0;
+
+        if (this.keys.a.isDown || this.keys.left.isDown) dx -= 1;
+        if (this.keys.d.isDown || this.keys.right.isDown) dx += 1;
+        if (this.keys.w.isDown || this.keys.up.isDown) dy -= 1;
+        if (this.keys.s.isDown || this.keys.down.isDown) dy += 1;
+
+        if (this.joystick && this.joystick.active) {
+            dx = this.joystick.deltaX;
+            dy = this.joystick.deltaY;
+        }
+
+        this.player.setDesiredDirection(dx, dy);
+
         let isBoosting = false;
-        if (this.keys.space.isDown && this.player.boostEnergy > 0) {
+        if ((this.keys.space.isDown || (this.hud && this.hud.isBoostPressed)) && this.player.boostEnergy > 0) {
             isBoosting = true;
         }
         this.player.update(dt, isBoosting);
+
+        // Dynamic Camera Zoom
+        const targetZoom = 1 - (this.player.segments * 0.002);
+        const clampedZoom = Phaser.Math.Clamp(targetZoom, 0.7, 1);
+        this.cameras.main.setZoom(Phaser.Math.Linear(this.cameras.main.zoom, clampedZoom, 0.05));
+
+        if (time - this.lastEatTime > GameBalance.combo.window) {
+            this.comboCount = 0;
+        }
+
 
 
         // Assist: Early Game Rescue

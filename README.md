@@ -1,4 +1,4 @@
-# Number Snake Arena v0.1.2
+# Number Snake Arena v0.1.4
 
 A modern HTML5 arcade game where you play as a number snake. Eat smaller numbers to grow, avoid larger numbers to survive. Features dynamic role reversal where hunters become prey as you grow!
 
@@ -17,7 +17,7 @@ Play the game now: [https://chaohuang-TW.github.io/number-snake-arena/](https://
 
 ### Desktop
 - **Move**: `W` `A` `S` `D` or Arrow Keys
-- **Boost**: Spacebar or `B`
+- **Boost**: Spacebar
 
 ### Mobile / Touch
 - **Move**: On-screen Virtual Joystick (multi-touch supported)

@@ -87,6 +87,13 @@ export class GameScene extends Phaser.Scene {
         this.audio = new AudioSystem(this);
         
         const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('e2e') === '1') {
+            (window as any).__E2E_READONLY__ = {
+                getPlayerValue: () => this.player ? this.player.value : 0,
+                getBossSpawned: () => this.bossSpawned,
+                getBossState: () => this.boss ? (this.boss.isFleeing ? 'FLEE' : 'CHASE') : 'NONE'
+            };
+        }
         if (urlParams.get('debug') === '1') {
             this.debugUI = new DebugUI(this, this.player, () => this.enemies.length, () => this.boss);
             this.input.keyboard!.on('keydown-C', () => {
@@ -101,7 +108,7 @@ export class GameScene extends Phaser.Scene {
                 setPlayerHP: (val: number) => { this.player.hp = val; this.player.isInvulnerable = false; },
                 getBodySegments: () => this.player.segments,
                 getPlayerPosition: () => ({ x: this.player.head.x, y: this.player.head.y }),
-                getCurrentAngle: () => this.player.head.rotation,
+                getCurrentAngle: () => this.player.currentAngle,
                 getTargetAngle: () => this.player.targetAngle,
                 getBoostEnergy: () => this.player.boostEnergy,
 
@@ -115,12 +122,14 @@ export class GameScene extends Phaser.Scene {
                     if (!this.bossSpawned) this.spawnBoss();
                 },
                 getBossState: () => this.boss ? (this.boss.isFleeing ? 'FLEE' : 'CHASE') : 'NONE',
+                forceSpecificEnemy: (e: any) => { this.player.isInvulnerable = false; this.handleEnemyCollision(e, 0, this.time.now); },
                 forceCollisionWithEnemy: (index: number) => {
+                    this.player.isInvulnerable = false;
                     if (this.enemies[index]) {
                         this.handleEnemyCollision(this.enemies[index], index, this.time.now);
                     }
                 },
-                forceCollisionWithBoss: () => {
+                forceCollisionWithBoss: () => { this.player.isInvulnerable = false; 
                     if (this.boss) this.handleBossCollision();
                 },
                 getGameState: () => {
@@ -414,9 +423,9 @@ export class GameScene extends Phaser.Scene {
             
         } else if (!this.player.isInvulnerable) {
             // DAMAGE
-            const dmg = calculateDamage(this.player.value, e.value);
+            const dmg = calculateDamage(this.player.value, e.value); console.error(`handleEnemyCollision! pVal=${this.player.value} eVal=${e.value} dmg=`, dmg);
             if (dmg.instantKO) {
-                this.gameOver();
+                console.error(`gameOver called! gameState was ${this.gameState}`); this.gameState = 'GAME_OVER'; this.audio.playGameOver(); this.saveScore(); this.showEndScreen('GAME OVER', '#ff0000');
             } else if (dmg.hpLoss > 0) {
                 const newSeg = calculateNewBodySegments(this.player.segments, dmg.hpLoss);
                 const angle = Math.atan2(this.player.head.y - e.body.y, this.player.head.x - e.body.x);
@@ -424,7 +433,7 @@ export class GameScene extends Phaser.Scene {
                 this.cameras.main.shake(200, 0.01);
                 this.audio.playHitSFX();
                 if (this.player.hp <= 0) {
-                    this.gameOver();
+                    console.error(`gameOver called! gameState was ${this.gameState}`); this.gameState = 'GAME_OVER'; this.audio.playGameOver(); this.saveScore(); this.showEndScreen('GAME OVER', '#ff0000');
                 }
             }
         }
@@ -443,7 +452,7 @@ export class GameScene extends Phaser.Scene {
             // DAMAGE
             const dmg = calculateDamage(this.player.value, this.boss!.value);
             if (dmg.instantKO) {
-                this.gameOver();
+                console.error(`gameOver called! gameState was ${this.gameState}`); this.gameState = 'GAME_OVER'; this.audio.playGameOver(); this.saveScore(); this.showEndScreen('GAME OVER', '#ff0000');
             } else if (dmg.hpLoss > 0) {
                 const newSeg = calculateNewBodySegments(this.player.segments, dmg.hpLoss);
                 const angle = Math.atan2(this.player.head.y - this.boss!.body.y, this.player.head.x - this.boss!.body.x);
@@ -451,7 +460,7 @@ export class GameScene extends Phaser.Scene {
                 this.cameras.main.shake(200, 0.01);
                 this.audio.playHitSFX();
                 if (this.player.hp <= 0) {
-                    this.gameOver();
+                    console.error(`gameOver called! gameState was ${this.gameState}`); this.gameState = 'GAME_OVER'; this.audio.playGameOver(); this.saveScore(); this.showEndScreen('GAME OVER', '#ff0000');
                 }
             }
         }

@@ -1,28 +1,65 @@
 # Number Snake Arena
 
-A real-time action arena game where you play as a snake of numbers. Eat smaller numbers to grow, avoid larger numbers, and hunt down Boss 100!
+A modern HTML5 arcade game where you play as a number snake. Eat smaller numbers to grow, avoid larger numbers to survive. Features dynamic role reversal where hunters become prey as you grow!
+
+## Live Demo
+
+Play the game now: [https://chaohuang-TW.github.io/number-snake-arena/](https://chaohuang-TW.github.io/number-snake-arena/)
 
 ## Gameplay
-- **Eat** enemies with a value smaller than yours.
-- **Avoid** enemies with a value larger than yours.
-- Grow your body segments and value.
-- Reaching value 70 spawns the **Boss 100**.
-- Once your value exceeds 100, hunt and eat the Boss to win!
+
+- **Grow to Survive**: Start as the number 5. Eat enemies with a value strictly less than yours to increase your body segments and value by the amount eaten.
+- **Dynamic Role Reversal**: Enemies larger than you will hunt you (red color). Enemies smaller than you will flee (green color). When you grow larger than a hunter, they will immediately turn green and run away!
+- **Boss Fight**: Reach a value of 70 to summon the legendary Boss 100. Reach 101 to make it vulnerable, eat it, and claim victory!
+- **Boost**: Hold the Boost button to increase your speed, consuming energy. Release to recharge.
 
 ## Controls
-- **Desktop**: WASD or Arrow Keys to steer. SPACE for Boost.
-- **Mobile**: Virtual Joystick on the left. Boost button on the right.
+
+### Desktop
+- **Move**: `W` `A` `S` `D` or Arrow Keys
+- **Boost**: Spacebar or `B`
+
+### Mobile / Touch
+- **Move**: On-screen Virtual Joystick (multi-touch supported)
+- **Boost**: On-screen BOOST button
 
 ## Development
+
+Built with:
+- [Phaser 4.2.1](https://phaser.io/)
+- [Vite](https://vitejs.dev/)
+- [TypeScript](https://www.typescriptlang.org/)
+- Web Audio API (Synthesized SFX)
+
+## Tests
+
+The project includes a robust test suite for game logic and end-to-end browser regression.
+
 ```bash
+# Install dependencies
 npm install
-npm run dev
+
+# Run unit tests
 npm run test
+
+# Run local end-to-end browser tests (requires Playwright)
+npm run test:e2e
+```
+
+## Build
+
+To build the game for production:
+
+```bash
 npm run build
 ```
 
-## Deployment
-This game is automatically deployed to GitHub Pages using GitHub Actions on every push to the `main` branch.
+The output will be generated in the `dist` folder.
 
-## Live Demo
-https://huanghsinchao.github.io/number-snake-arena/
+## Deployment
+
+This project uses GitHub Actions for continuous deployment.
+Every push to the `main` branch automatically runs tests and deploys the production build to GitHub Pages.
+
+---
+*Developed autonomously via Google Antigravity.*

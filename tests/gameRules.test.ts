@@ -57,5 +57,25 @@ describe('Game Rules', () => {
             const { hpLoss, instantKO } = calculateDamage(10, 25);
             expect(instantKO).toBe(true);
         });
+        
+        it('Boss: Player 100 / Boss 100 (R = 1.0)', () => {
+            const { hpLoss, instantKO } = calculateDamage(100, 100);
+            expect(hpLoss).toBe(1);
+            expect(instantKO).toBe(false);
+        });
+        it('Boss: Player 80 / Boss 100 (R = 1.25)', () => {
+            const { hpLoss, instantKO } = calculateDamage(80, 100);
+            expect(hpLoss).toBe(1);
+            expect(instantKO).toBe(false);
+        });
+        it('Boss: Player 50 / Boss 100 (R = 2.0)', () => {
+            const { hpLoss, instantKO } = calculateDamage(50, 100);
+            expect(hpLoss).toBe(2);
+            expect(instantKO).toBe(false);
+        });
+        it('Boss: Player 40 / Boss 100 (R = 2.5)', () => {
+            const { hpLoss, instantKO } = calculateDamage(40, 100);
+            expect(instantKO).toBe(true);
+        });
     });
 });

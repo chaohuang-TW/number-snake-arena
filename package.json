@@ -1,14 +1,15 @@
 {
   "name": "number-snake-arena",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:e2e": "node tests/e2e/test-playwright.cjs"
+    "test:e2e": "node tests/e2e/test-playwright.cjs",
+    "test:prod": "node tests/e2e/test-production.cjs"
   },
   "dependencies": {
     "phaser": "4.2.1"

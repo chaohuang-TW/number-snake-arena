@@ -83,6 +83,52 @@ export class GameScene extends Phaser.Scene {
             this.input.keyboard!.on('keydown-C', () => {
                 this.player.value += 10;
             });
+
+            // Expose debug API for E2E tests
+            (window as any).__NUMBER_SNAKE_DEBUG__ = {
+                getPlayerValue: () => this.player.value,
+                setPlayerValue: (val: number) => { this.player.value = val; },
+                getPlayerHP: () => this.player.hp,
+                setPlayerHP: (val: number) => { this.player.hp = val; },
+                getBodySegments: () => this.player.segments,
+                spawnEnemy: (val: number, x: number, y: number) => {
+                    const e = new NumberEnemy(this, x, y, val);
+                    this.enemies.push(e);
+                    return e;
+                },
+                getEnemies: () => this.enemies,
+                spawnBoss: () => {
+                    if (!this.bossSpawned) this.spawnBoss();
+                },
+                getBossState: () => this.boss ? (this.boss.isFleeing ? 'FLEE' : 'CHASE') : 'NONE',
+                forceCollisionWithEnemy: (index: number) => {
+                    if (this.enemies[index]) {
+                        this.handleEnemyCollision(this.enemies[index], index, this.time.now);
+                    }
+                },
+                forceCollisionWithBoss: () => {
+                    if (this.boss) this.handleBossCollision();
+                },
+                getGameState: () => {
+                    if (this.isGameOver) return 'GAME_OVER';
+                    return this.scene.isPaused('GameScene') ? 'PAUSED' : 'RUNNING';
+                },
+                simulateVisibilityHidden: () => {
+                    Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+                    this.handleVisibilityChange();
+                },
+                simulateVisibilityVisible: () => {
+                    Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
+                    this.handleVisibilityChange();
+                },
+                getResizeListenerCount: () => this.scale.listenerCount('resize'),
+                stopSpawning: () => { this.spawnTimer = 9999999; },
+                getPlayerPos: () => ({ x: this.player.head.x, y: this.player.head.y }),
+                restartGame: () => { this.scene.start('GameScene'); }
+            };
+        } else {
+            // Ensure no debug API exists in normal mode
+            (window as any).__NUMBER_SNAKE_DEBUG__ = undefined;
         }
 
         this.keys = this.input.keyboard!.addKeys('w,a,s,d,up,down,left,right,space') as any;
@@ -92,13 +138,18 @@ export class GameScene extends Phaser.Scene {
         // Visibility API pause
         document.addEventListener('visibilitychange', this.handleVisibilityChange);
 
+        this.events.on('shutdown', this.teardown, this);
+
         // Initial spawn
         for (let i=0; i<20; i++) this.spawnEnemy();
     }
 
     handleVisibilityChange = () => {
         if (document.hidden) {
-            this.scene.pause();
+            if (!this.scene.isPaused('GameScene')) {
+                this.scene.pause('GameScene');
+                this.scene.launch('PauseScene');
+            }
         }
     }
 
@@ -285,8 +336,20 @@ export class GameScene extends Phaser.Scene {
             this.hud.addScore(1000);
             this.victory();
         } else if (!this.player.isInvulnerable) {
-            // Boss instant kills if not > 100
-            this.gameOver();
+            // DAMAGE
+            const dmg = calculateDamage(this.player.value, this.boss!.value);
+            if (dmg.instantKO) {
+                this.gameOver();
+            } else if (dmg.hpLoss > 0) {
+                const newSeg = calculateNewBodySegments(this.player.segments, dmg.hpLoss);
+                const angle = Math.atan2(this.player.head.y - this.boss!.body.y, this.player.head.x - this.boss!.body.x);
+                this.player.takeDamage(dmg.hpLoss, newSeg, new Phaser.Math.Vector2(Math.cos(angle), Math.sin(angle)));
+                this.cameras.main.shake(200, 0.01);
+                this.audio.playHitSFX();
+                if (this.player.hp <= 0) {
+                    this.gameOver();
+                }
+            }
         }
     }
 
@@ -354,16 +417,17 @@ export class GameScene extends Phaser.Scene {
         }).setOrigin(0.5).setDepth(301).setInteractive({ useHandCursor: true });
 
         btn.on('pointerdown', () => {
-            this.teardown();
             this.scene.start('GameScene');
         });
     }
 
     teardown() {
         document.removeEventListener('visibilitychange', this.handleVisibilityChange);
+        this.scale.off('resize', this.resize, this);
         this.enemies.forEach(e => e.destroy());
         this.player.destroy();
         this.boss?.destroy();
+        if (this.debugUI) this.debugUI.text.destroy();
     }
 
     resize(gameSize: Phaser.Structs.Size) {

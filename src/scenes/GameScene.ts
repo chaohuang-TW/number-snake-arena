@@ -7,6 +7,7 @@ import { HUD } from '../ui/HUD';
 import { AudioSystem } from '../systems/AudioSystem';
 import { GameBalance } from '../config/gameBalance';
 import { isEdible, calculateDamage, calculateNewBodySegments } from '../utils/gameRules';
+import { DebugUI } from '../ui/DebugUI';
 
 export class GameScene extends Phaser.Scene {
     player!: PlayerSnake;
@@ -16,6 +17,7 @@ export class GameScene extends Phaser.Scene {
     joystick!: VirtualJoystick;
     hud!: HUD;
     audio!: AudioSystem;
+    debugUI?: DebugUI;
 
     keys!: {
         w: Phaser.Input.Keyboard.Key,
@@ -74,6 +76,14 @@ export class GameScene extends Phaser.Scene {
         this.joystick = new VirtualJoystick(this);
         this.hud = new HUD(this);
         this.audio = new AudioSystem(this);
+        
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('debug') === '1') {
+            this.debugUI = new DebugUI(this, this.player, () => this.enemies.length, () => this.boss);
+            this.input.keyboard!.on('keydown-C', () => {
+                this.player.value += 10;
+            });
+        }
 
         this.keys = this.input.keyboard!.addKeys('w,a,s,d,up,down,left,right,space') as any;
 
@@ -151,6 +161,10 @@ export class GameScene extends Phaser.Scene {
         if (this.spawnTimer <= 0 && this.enemies.length < GameBalance.enemy.normalMaxLimit) {
             this.spawnEnemy();
             this.spawnTimer = 500;
+        }
+        
+        if (this.debugUI) {
+            this.debugUI.update();
         }
 
         this.hud.update(this.player.hp, this.player.boostEnergy, GameBalance.player.maxBoostEnergy);

@@ -109,20 +109,36 @@ const { chromium } = require('playwright');
 
             // === TEST B: Role Reversal ===
             console.log('\n--- Test B: Role Reversal ---');
+            await page.evaluate(() => { API.restartGame(); });
+            await page.waitForTimeout(1000);
+            await page.evaluate(() => { window.API = window.__NUMBER_SNAKE_DEBUG__; window.API.stopSpawning(); });
+            await cleanEnemies();
             await page.evaluate(() => {
                 API.setPlayerValue(8);
                 let pos = API.getPlayerPos();
-                API.spawnEnemy(12, pos.x + 100, pos.y);
+                API.spawnEnemy(12, pos.x + 200, pos.y);
             });
             await page.waitForTimeout(100);
-            let state = await page.evaluate(() => API.getEnemies()[0].state);
-            assert(state === 2, `Enemy state should be 2 (CHASE), got ${state}`);
+            let stateInfo = await page.evaluate(() => {
+                let e = API.getEnemies()[0];
+                let p = API.getPlayerPos();
+                let dist = Math.sqrt(Math.pow(e.body.x - p.x, 2) + Math.pow(e.body.y - p.y, 2));
+                return { state: e.state, dist };
+            });
+            assert(stateInfo.state === 2, `Enemy state should be 2 (CHASE), got ${stateInfo.state} (dist: ${stateInfo.dist})`);
             
             await page.evaluate(() => { API.setPlayerValue(13); });
             await page.waitForTimeout(100);
-            state = await page.evaluate(() => API.getEnemies()[0].state);
-            assert(state === 1, `Enemy state should be 1 (FLEE), got ${state}`);
+            stateInfo = await page.evaluate(() => {
+                let e = API.getEnemies()[0];
+                let p = API.getPlayerPos();
+                let dist = Math.sqrt(Math.pow(e.body.x - p.x, 2) + Math.pow(e.body.y - p.y, 2));
+                return { state: e.state, dist };
+            });
+            assert(stateInfo.state === 1, `Enemy state should be 1 (FLEE), got ${stateInfo.state} (dist: ${stateInfo.dist})`);
             await cleanEnemies();
+
+
 
             // === TEST C: Damage Boundaries ===
             console.log('\n--- Test C: Damage Boundaries ---');
@@ -219,7 +235,34 @@ const { chromium } = require('playwright');
             await cleanEnemies();
 
             // === TEST G: Pause / Resume ===
+            // === TEST F: Eat Assist & Early Game ===
+            console.log('\n--- Test F: Eat Assist & Early Game ---');
+            await page.evaluate(() => { 
+                API.getEnemies().length = 0; API.setPlayerValue(20); API.setPlayerHP(3); 
+                let pos = API.getPlayerPos();
+                let e = API.spawnEnemy(15, pos.x + 50, pos.y); 
+            });
+            await page.waitForTimeout(500); // give it time to trigger assist
+            let pValAssist = await page.evaluate(() => API.getPlayerValue());
+            assert(pValAssist === 35, `Player should eat enemy via assist, got ${pValAssist}`);
+            
+            // Should not eat larger enemy
+            await page.evaluate(() => { 
+                API.getEnemies().length = 0; API.setPlayerValue(20);
+                let pos = API.getPlayerPos();
+                let e = API.spawnEnemy(25, pos.x + 50, pos.y); 
+            });
+            await page.waitForTimeout(500);
+            pValAssist = await page.evaluate(() => API.getPlayerValue());
+            assert(pValAssist === 20, `Player should NOT eat larger enemy via assist, got ${pValAssist}`);
+            
+            await page.evaluate(() => { API.restartGame(); });
+            await page.waitForTimeout(1000);
+            await page.evaluate(() => { window.API = window.__NUMBER_SNAKE_DEBUG__; window.API.stopSpawning(); });
+            await cleanEnemies();
+
             console.log('\n--- Test G: Pause / Resume ---');
+
             await page.evaluate(() => { API.simulateVisibilityHidden(); });
             await page.waitForTimeout(500);
             let gState = await page.evaluate(() => API.getGameState());

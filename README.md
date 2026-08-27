@@ -1,4 +1,4 @@
-# Number Snake Arena
+# Number Snake Arena v0.1.2
 
 A modern HTML5 arcade game where you play as a number snake. Eat smaller numbers to grow, avoid larger numbers to survive. Features dynamic role reversal where hunters become prey as you grow!
 
@@ -23,10 +23,12 @@ Play the game now: [https://chaohuang-TW.github.io/number-snake-arena/](https://
 - **Move**: On-screen Virtual Joystick (multi-touch supported)
 - **Boost**: On-screen BOOST button
 
+*Note on Mobile testing: Responsive behavior and virtual controls are heavily verified via automated browser emulation (Playwright). True physical hardware device testing (e.g. real iPhone Safari, Android Chrome, iPad Safari) has not been exhaustively performed.*
+
 ## Development
 
 Built with:
-- [Phaser 4.2.1](https://phaser.io/)
+- [Phaser 3.80+](https://phaser.io/)
 - [Vite](https://vitejs.dev/)
 - [TypeScript](https://www.typescriptlang.org/)
 - Web Audio API (Synthesized SFX)
@@ -39,11 +41,14 @@ The project includes a robust test suite for game logic and end-to-end browser r
 # Install dependencies
 npm install
 
-# Run unit tests
+# Run unit tests (Core game logic, damage rules, physics helpers)
 npm run test
 
-# Run local end-to-end browser tests (requires Playwright)
+# Run local end-to-end browser tests (Requires a local dev server running, simulates gameplay locally)
 npm run test:e2e
+
+# Run production end-to-end browser tests (Tests the live GitHub Pages URL with the exact same E2E suite)
+npm run test:prod
 ```
 
 ## Build

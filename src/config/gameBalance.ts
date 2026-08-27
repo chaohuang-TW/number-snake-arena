@@ -14,24 +14,40 @@ export const GameBalance = {
         boostEatRecovery: 12,
         invulnerabilityDuration: 1200, // ms
         hitStunDuration: 250, // ms
-        turnRate: 0.1, // lerp factor for turning
-        turnRatePenaltyPerSegment: 0.005,
-        maxTurnRatePenalty: 0.25, // 25% drop
+        turnRate: 0.12, // lerp factor for turning
+        turnRatePenaltyPerSegment: 0.004,
+        maxTurnRatePenalty: 0.18, // 18% drop max
     },
     enemy: {
-        normalMaxLimit: 45, // active on screen
-        safeRatio: 0.55,
+        normalMaxLimit: 38, // active on screen
+        safeRatio: 0.60,
         highValueRatio: 0.20,
-        hunterRatio: 0.20,
-        giantRatio: 0.05,
-        preySpeedMultiplier: 0.85, // slightly slower than player so they can be caught
-        highValuePreySpeedMultiplier: 1.05, // slightly faster
-        hunterSpeedMultiplier: 0.7, // slower than player so player can escape
-        giantSpeedMultiplier: 0.4,
-        fleeDistance: 250, // pixels
-        chaseDistance: 350, // pixels
-        spawnDistanceMin: 500,
-        spawnDistanceMax: 800,
+        hunterRatio: 0.17,
+        giantRatio: 0.03,
+        preySpeedMultiplier: 0.60, // basic prey
+        highValuePreySpeedMultiplier: 0.75, // high-value prey
+        hunterSpeedMultiplier: 0.72,
+        giantSpeedMultiplier: 0.38,
+        fleeDistance: 170, // pixels
+        chaseDistance: 330, // pixels
+        // Base spawn distances, will be overridden by role
+        spawnDistanceMin: 240,
+        spawnDistanceMax: 520,
+        
+        spawnRanges: {
+            edible: { min: 240, max: 520 },
+            hunter: { min: 420, max: 720 },
+            giant: { min: 700, max: 1000 }
+        }
+    },
+    assist: {
+        earlyGameRescueValue: 25,
+        earlyGameRescueTimer: 7000,
+        earlyGameRescueCooldown: 10000,
+        earlyGameRescueDistMin: 180,
+        earlyGameRescueDistMax: 300,
+        eatAssistRadius: 65,
+        eatAssistConeDeg: 110
     },
     boss: {
         triggerValue: 70,

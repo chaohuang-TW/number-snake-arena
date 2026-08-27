@@ -34,25 +34,32 @@ export class GameScene extends Phaser.Scene {
     comboCount: number = 0;
     lastEatTime: number = 0;
     bossSpawned: boolean = false;
-    isGameOver: boolean = false;
+    gameState: string = 'RUNNING';
 
     // Background grid
     grid!: Phaser.GameObjects.Grid;
     
     // Spawn timer
     spawnTimer: number = 0;
+    
+    gameStartTime: number = 0;
+    lastRescueTime: number = 0;
+    lastEdibleCheckTime: number = 0;
 
     constructor() {
         super('GameScene');
     }
 
     create() {
-        this.isGameOver = false;
+        this.gameState = 'RUNNING';
         this.enemies = [];
         this.boss = null;
         this.bossSpawned = false;
         this.comboCount = 0;
         this.lastEatTime = 0;
+        this.gameStartTime = this.time.now;
+        this.lastRescueTime = this.time.now;
+        this.lastEdibleCheckTime = this.time.now;
 
         // World setup
         const ww = GameBalance.world.width;
@@ -89,7 +96,7 @@ export class GameScene extends Phaser.Scene {
                 getPlayerValue: () => this.player.value,
                 setPlayerValue: (val: number) => { this.player.value = val; },
                 getPlayerHP: () => this.player.hp,
-                setPlayerHP: (val: number) => { this.player.hp = val; },
+                setPlayerHP: (val: number) => { this.player.hp = val; this.player.isInvulnerable = false; },
                 getBodySegments: () => this.player.segments,
                 spawnEnemy: (val: number, x: number, y: number) => {
                     const e = new NumberEnemy(this, x, y, val);
@@ -110,7 +117,7 @@ export class GameScene extends Phaser.Scene {
                     if (this.boss) this.handleBossCollision();
                 },
                 getGameState: () => {
-                    if (this.isGameOver) return 'GAME_OVER';
+                    if (this.gameState === 'GAME_OVER' || this.gameState === 'VICTORY') return this.gameState;
                     return this.scene.isPaused('GameScene') ? 'PAUSED' : 'RUNNING';
                 },
                 simulateVisibilityHidden: () => {
@@ -154,48 +161,69 @@ export class GameScene extends Phaser.Scene {
     }
 
     update(time: number, dt: number) {
-        if (this.isGameOver) return;
+        if (this.gameState === 'GAME_OVER' || this.gameState === 'VICTORY') return;
 
-        // Input
-        let dx = 0;
-        let dy = 0;
-        if (this.keys.a.isDown || this.keys.left.isDown) dx -= 1;
-        if (this.keys.d.isDown || this.keys.right.isDown) dx += 1;
-        if (this.keys.w.isDown || this.keys.up.isDown) dy -= 1;
-        if (this.keys.s.isDown || this.keys.down.isDown) dy += 1;
-
-        if (this.joystick.active) {
-            dx = this.joystick.deltaX;
-            dy = this.joystick.deltaY;
+        let isBoosting = false;
+        if (this.keys.space.isDown && this.player.boostEnergy > 0) {
+            isBoosting = true;
         }
-
-        this.player.setDesiredDirection(dx, dy);
-        
-        const isBoosting = this.keys.space.isDown || this.hud.isBoostPressed;
         this.player.update(dt, isBoosting);
 
-        // Dynamic Camera Zoom
-        const targetZoom = 1 - (this.player.segments * 0.002);
-        const clampedZoom = Phaser.Math.Clamp(targetZoom, 0.7, 1);
-        this.cameras.main.setZoom(Phaser.Math.Linear(this.cameras.main.zoom, clampedZoom, 0.05));
 
-        // Combo check
-        if (time - this.lastEatTime > GameBalance.combo.window) {
-            this.comboCount = 0;
+        // Assist: Early Game Rescue
+        if (!this.bossSpawned && this.player.value < GameBalance.assist.earlyGameRescueValue) {
+            if (time - this.lastEatTime > GameBalance.assist.earlyGameRescueTimer) {
+                if (time - this.lastRescueTime > GameBalance.assist.earlyGameRescueCooldown) {
+                    this.spawnEnemy(true);
+                    this.spawnEnemy(true);
+                    this.lastRescueTime = time;
+                }
+            }
         }
 
-        // Enemies update & collision
+        // Assist: Local Edible Availability
+        if (time - this.lastEdibleCheckTime > 2000 && !this.bossSpawned) {
+            this.lastEdibleCheckTime = time;
+            let edibleCount = 0;
+            this.enemies.forEach(e => {
+                if (!e.body.active) return;
+                if (e.value < this.player.value) {
+                    if (Phaser.Math.Distance.Between(this.player.head.x, this.player.head.y, e.body.x, e.body.y) < 450) {
+                        edibleCount++;
+                    }
+                }
+            });
+            if (edibleCount < 4 && this.enemies.length < GameBalance.enemy.normalMaxLimit) {
+                this.spawnEnemy(true);
+            }
+        }
+
         for (let i = this.enemies.length - 1; i >= 0; i--) {
             const e = this.enemies[i];
             e.update(dt, this.player.head.x, this.player.head.y, this.player.value);
             
-            // Collision check
-            if (this.physics.overlap(this.player.head, e.body)) {
+            let isHit = this.physics.overlap(this.player.head, e.body);
+            
+            // Eat Assist
+            if (!isHit && e.value < this.player.value) {
+                const dist = Phaser.Math.Distance.Between(this.player.head.x, this.player.head.y, e.body.x, e.body.y);
+                if (dist < GameBalance.assist.eatAssistRadius) {
+                    const angleToEnemy = Phaser.Math.Angle.Between(this.player.head.x, this.player.head.y, e.body.x, e.body.y);
+                    const playerAngle = Math.atan2(this.player.head.body ? (this.player.head.body as Phaser.Physics.Arcade.Body).velocity.y : 0, this.player.head.body ? (this.player.head.body as Phaser.Physics.Arcade.Body).velocity.x : 0);
+                    let diff = Phaser.Math.Angle.Wrap(angleToEnemy - playerAngle);
+                    if (Math.abs(Phaser.Math.RadToDeg(diff)) < GameBalance.assist.eatAssistConeDeg / 2) {
+                        isHit = true;
+                    }
+                }
+            }
+            
+            if (isHit) {
                 this.handleEnemyCollision(e, i, time);
             }
         }
 
         // Boss Logic
+
         if (this.player.value >= GameBalance.boss.triggerValue && !this.bossSpawned) {
             this.spawnBoss();
         }
@@ -221,46 +249,78 @@ export class GameScene extends Phaser.Scene {
         this.hud.update(this.player.hp, this.player.boostEnergy, GameBalance.player.maxBoostEnergy);
     }
 
-    spawnEnemy() {
-        // Find safe spawn pos
-        let angle = Math.random() * Math.PI * 2;
-        let dist = GameBalance.enemy.spawnDistanceMin + Math.random() * (GameBalance.enemy.spawnDistanceMax - GameBalance.enemy.spawnDistanceMin);
-        let sx = this.player.head.x + Math.cos(angle) * dist;
-        let sy = this.player.head.y + Math.sin(angle) * dist;
-        
-        // Clamp to world
-        const hw = GameBalance.world.width / 2 - 50;
-        const hh = GameBalance.world.height / 2 - 50;
-        sx = Phaser.Math.Clamp(sx, -hw, hw);
-        sy = Phaser.Math.Clamp(sy, -hh, hh);
-
-        // Determine value
-        const rand = Math.random();
-        let val = 1;
+    spawnEnemy(isRescue = false) {
         const pVal = this.player.value;
+        const now = this.time.now;
+        const gameTime = now - this.gameStartTime;
 
-        if (rand < GameBalance.enemy.safeRatio) {
-            // 1 to ~45% pVal
-            val = Math.max(1, Math.floor(Math.random() * (pVal * 0.45)));
-        } else if (rand < GameBalance.enemy.safeRatio + GameBalance.enemy.highValueRatio) {
-            // ~45% to pVal - 1
-            val = Math.max(1, Math.floor(pVal * 0.45 + Math.random() * (pVal * 0.55)));
-            if (val >= pVal) val = Math.max(1, pVal - 1);
-        } else if (rand < GameBalance.enemy.safeRatio + GameBalance.enemy.highValueRatio + GameBalance.enemy.hunterRatio) {
-            // pVal to 1.6 pVal
-            val = Math.floor(pVal + Math.random() * (pVal * 0.6));
+        let role = '';
+        let val = 1;
+
+        if (isRescue) {
+            role = 'edible';
+            val = Math.max(1, Math.floor(Math.random() * 3) + 1);
         } else {
-            // Giant Threat
-            val = Math.floor(pVal * 2.5 + Math.random() * (pVal * 0.5));
+            const rand = Math.random();
+            if (rand < GameBalance.enemy.safeRatio) {
+                role = 'edible';
+                val = Math.max(1, Math.floor(Math.random() * (pVal * 0.45)));
+                if (gameTime < 20000 && pVal <= 10) val = Math.floor(Math.random() * 4) + 1;
+            } else if (rand < GameBalance.enemy.safeRatio + GameBalance.enemy.highValueRatio) {
+                role = 'edible';
+                val = Math.max(1, Math.floor(pVal * 0.45 + Math.random() * (pVal * 0.55)));
+                if (val >= pVal) val = Math.max(1, pVal - 1);
+            } else if (rand < GameBalance.enemy.safeRatio + GameBalance.enemy.highValueRatio + GameBalance.enemy.hunterRatio) {
+                role = 'hunter';
+                val = Math.floor(pVal + Math.random() * (pVal * 0.6));
+            } else {
+                role = 'giant';
+                val = Math.floor(pVal * 2.5 + Math.random() * (pVal * 0.5));
+                if (gameTime < 15000) {
+                    role = 'hunter';
+                    val = Math.floor(pVal + Math.random() * (pVal * 0.6));
+                }
+            }
+            if (val > 99) val = 99;
         }
 
-        if (val > 99) val = 99; // Cap normal enemies
+        let range = { min: GameBalance.enemy.spawnRanges.edible.min, max: GameBalance.enemy.spawnRanges.edible.max };
+        if (role === 'hunter') range = GameBalance.enemy.spawnRanges.hunter;
+        else if (role === 'giant') range = GameBalance.enemy.spawnRanges.giant;
+        
+        if (isRescue) {
+            range = { min: GameBalance.assist.earlyGameRescueDistMin, max: GameBalance.assist.earlyGameRescueDistMax };
+        }
+
+        let sx = 0, sy = 0;
+        let validSpawn = false;
+        let attempts = 0;
+        const hw = GameBalance.world.width / 2 - 50;
+        const hh = GameBalance.world.height / 2 - 50;
+        
+        while (!validSpawn && attempts < 10) {
+            let angle = Math.random() * Math.PI * 2;
+            if (isRescue) {
+                const vAngle = Math.atan2(this.player.head.body ? (this.player.head.body as Phaser.Physics.Arcade.Body).velocity.y : 0, this.player.head.body ? (this.player.head.body as Phaser.Physics.Arcade.Body).velocity.x : 0);
+                angle = vAngle + (Math.random() * 1.5 - 0.75);
+            }
+            let dist = range.min + Math.random() * (range.max - range.min);
+            sx = Phaser.Math.Clamp(this.player.head.x + Math.cos(angle) * dist, -hw, hw);
+            sy = Phaser.Math.Clamp(this.player.head.y + Math.sin(angle) * dist, -hh, hh);
+            
+            const actualDist = Phaser.Math.Distance.Between(this.player.head.x, this.player.head.y, sx, sy);
+            if (actualDist >= range.min - 10) {
+                validSpawn = true;
+            }
+            attempts++;
+        }
 
         const enemy = new NumberEnemy(this, sx, sy, val);
         this.enemies.push(enemy);
     }
 
     spawnBoss() {
+
         this.bossSpawned = true;
         
         let angle = Math.random() * Math.PI * 2;
@@ -380,14 +440,14 @@ export class GameScene extends Phaser.Scene {
     }
 
     gameOver() {
-        this.isGameOver = true;
+        this.gameState = 'GAME_OVER';
         this.audio.playGameOver();
         this.saveScore();
         this.showEndScreen('GAME OVER', '#ff0000');
     }
 
     victory() {
-        this.isGameOver = true;
+        this.gameState = 'VICTORY';
         this.audio.playVictory();
         this.saveScore();
         this.showEndScreen('VICTORY', '#00ff00');

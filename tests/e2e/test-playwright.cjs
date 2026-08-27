@@ -42,16 +42,16 @@ const baseURL = 'http://localhost:3000/';
             // === Testing NORMAL URL Security ===
             console.log('\n=== Testing NORMAL URL Security ===');
             await page.goto(baseURL + "?e2e=1", { waitUntil: 'networkidle' });
-            await page.waitForTimeout(2000);
+            await page.waitForTimeout(6000);
             
             // start game
             let vpNormal = page.viewportSize();
             await page.mouse.click(vpNormal.width / 2, vpNormal.height / 2 + 60); 
-            await page.waitForTimeout(1000);
+            await page.waitForTimeout(3000);
             
             for(let i=0; i<10; i++) {
                 await page.keyboard.press('c');
-                await page.waitForTimeout(100);
+                await page.waitForTimeout(300);
             }
             
             let e2ePVal = await page.evaluate(() => window.__E2E_READONLY__.getPlayerValue());
@@ -67,11 +67,11 @@ const baseURL = 'http://localhost:3000/';
             // === Testing DEBUG URL Gameplay ===
             console.log('\n=== Testing DEBUG URL Gameplay ===');
             await page.goto(baseURL + '?debug=1', { waitUntil: 'networkidle' });
-            await page.waitForTimeout(2000);
+            await page.waitForTimeout(6000);
             
             let vp = page.viewportSize();
             await page.mouse.click(vp.width / 2, vp.height / 2 + 60); 
-            await page.waitForTimeout(1000);
+            await page.waitForTimeout(3000);
 
             let debugObj = await page.evaluate(() => typeof window.__NUMBER_SNAKE_DEBUG__);
             assert(debugObj === 'object', `__NUMBER_SNAKE_DEBUG__ must be exposed on ?debug=1, got ${debugObj}`);
@@ -107,7 +107,7 @@ const baseURL = 'http://localhost:3000/';
             assert(enemiesLen === 0, `Enemy should be removed`);
 
             await cleanEnemies();
-            await page.waitForTimeout(1500);
+            await page.waitForTimeout(4500);
             
             await page.evaluate(() => {
                 API.setPlayerValue(5);
@@ -126,7 +126,7 @@ const baseURL = 'http://localhost:3000/';
             // === TEST B: Role Reversal ===
             console.log('\\n--- Test B: Role Reversal ---');
             await page.evaluate(() => { API.restartGame(); });
-            await page.waitForTimeout(1000);
+            await page.waitForTimeout(3000);
             await page.evaluate(() => { window.API = window.__NUMBER_SNAKE_DEBUG__; window.API.stopSpawning(); });
             await cleanEnemies();
 
@@ -153,7 +153,7 @@ const baseURL = 'http://localhost:3000/';
             // === TEST C: Damage Boundaries ===
             console.log('\n--- Test C: Damage Boundaries ---');
             await page.evaluate(() => { API.restartGame(); });
-            await page.waitForTimeout(1000);
+            await page.waitForTimeout(3000);
             await page.evaluate(() => { window.API = window.__NUMBER_SNAKE_DEBUG__; window.API.stopSpawning(); });
             await cleanEnemies();
             
@@ -161,13 +161,13 @@ const baseURL = 'http://localhost:3000/';
             let hpC1 = await page.evaluate(() => API.getPlayerHP());
             assert(hpC1 === 2, `HP should be 2, got ${hpC1}`);
             await cleanEnemies();
-            await page.waitForTimeout(1500);
+            await page.waitForTimeout(4500);
 
             await page.evaluate(() => { API.setPlayerValue(10); API.setPlayerHP(3); let e2 = API.spawnEnemy(24, API.getPlayerPos().x, API.getPlayerPos().y); console.log('SPAWNED e2:', e2.value, API.getEnemies().length); API.forceSpecificEnemy(e2); });
             let hpC2 = await page.evaluate(() => API.getPlayerHP());
             assert(hpC2 === 1, `HP should be 1, got ${hpC2}`);
             await cleanEnemies();
-            await page.waitForTimeout(1500);
+            await page.waitForTimeout(4500);
 
             await page.evaluate(() => { API.setPlayerValue(10); API.setPlayerHP(3); let e3 = API.spawnEnemy(26, API.getPlayerPos().x, API.getPlayerPos().y); console.log('SPAWNED e3:', e3.value, API.getEnemies().length); API.forceSpecificEnemy(e3); });
             let gStateC3 = await page.evaluate(() => API.getGameState());
@@ -176,7 +176,7 @@ const baseURL = 'http://localhost:3000/';
             // === TEST D: Boss Damage ===
             console.log('\n--- Test D: Boss Damage ---');
             await page.evaluate(() => { API.restartGame(); });
-            await page.waitForTimeout(1000);
+            await page.waitForTimeout(3000);
             await page.evaluate(() => { window.API = window.__NUMBER_SNAKE_DEBUG__; window.API.stopSpawning(); API.spawnBoss(); });
             
             await page.evaluate(() => { API.setPlayerValue(80); API.setPlayerHP(3); API.forceCollisionWithBoss(); });
@@ -184,14 +184,14 @@ const baseURL = 'http://localhost:3000/';
             let sD1 = await page.evaluate(() => API.getGameState());
             assert(hpD1 === 2, `HP should be 2, got ${hpD1}`);
             assert(sD1 === 'RUNNING', `Game state should be RUNNING, got ${sD1}`);
-            await page.waitForTimeout(1500);
+            await page.waitForTimeout(4500);
 
             await page.evaluate(() => { API.setPlayerValue(60); API.setPlayerHP(3); API.forceCollisionWithBoss(); });
             let hpD2 = await page.evaluate(() => API.getPlayerHP());
             let sD2 = await page.evaluate(() => API.getGameState());
             assert(hpD2 === 1, `HP should be 1, got ${hpD2}`);
             assert(sD2 === 'RUNNING', `Game state should be RUNNING, got ${sD2}`);
-            await page.waitForTimeout(1500);
+            await page.waitForTimeout(4500);
 
             await page.evaluate(() => { API.setPlayerValue(30); API.setPlayerHP(3); API.forceCollisionWithBoss(); });
             let sD3 = await page.evaluate(() => API.getGameState());
@@ -200,16 +200,16 @@ const baseURL = 'http://localhost:3000/';
             // === TEST E: Boss Reversal & Victory ===
             console.log('\\n--- Test E: Boss Reversal & Victory ---');
             await page.evaluate(() => { API.restartGame(); });
-            await page.waitForTimeout(1000);
+            await page.waitForTimeout(3000);
             await page.evaluate(() => { window.API = window.__NUMBER_SNAKE_DEBUG__; window.API.stopSpawning(); API.spawnBoss(); });
             
-            await page.evaluate(() => { API.setPlayerValue(99); }); await page.waitForTimeout(100); let bossSE1 = await page.evaluate(() => API.getBossState());
+            await page.evaluate(() => { API.setPlayerValue(99); }); await page.waitForTimeout(300); let bossSE1 = await page.evaluate(() => API.getBossState());
             assert(bossSE1 === 'CHASE', `Boss should be CHASE, got ${bossSE1}`);
             
-            await page.evaluate(() => { API.setPlayerValue(100); }); await page.waitForTimeout(100); let bossSE2 = await page.evaluate(() => API.getBossState());
+            await page.evaluate(() => { API.setPlayerValue(100); }); await page.waitForTimeout(300); let bossSE2 = await page.evaluate(() => API.getBossState());
             assert(bossSE2 === 'CHASE', `Boss should be CHASE, got ${bossSE2}`);
             
-            await page.evaluate(() => { API.setPlayerValue(101); }); await page.waitForTimeout(100); let bossSE3 = await page.evaluate(() => API.getBossState());
+            await page.evaluate(() => { API.setPlayerValue(101); }); await page.waitForTimeout(300); let bossSE3 = await page.evaluate(() => API.getBossState());
             assert(bossSE3 === 'FLEE', `Boss should be FLEE, got ${bossSE3}`);
             
             await page.evaluate(() => { API.setPlayerValue(105); API.forceCollisionWithBoss(); });
@@ -221,7 +221,7 @@ const baseURL = 'http://localhost:3000/';
             // === TEST F: Eat Assist & Early Game ===
             console.log('\\n--- Test F: Eat Assist & Early Game ---');
             await page.evaluate(() => { API.restartGame(); });
-            await page.waitForTimeout(1000);
+            await page.waitForTimeout(3000);
             await page.evaluate(() => { window.API = window.__NUMBER_SNAKE_DEBUG__; window.API.stopSpawning(); });
             await cleanEnemies();
             
@@ -247,14 +247,14 @@ const baseURL = 'http://localhost:3000/';
             // === TEST G: Pause / Resume ===
             console.log('\\n--- Test G: Pause / Resume ---');
             await page.evaluate(() => { API.restartGame(); });
-            await page.waitForTimeout(1000);
+            await page.waitForTimeout(3000);
             await page.evaluate(() => { window.API = window.__NUMBER_SNAKE_DEBUG__; API.simulateVisibilityHidden(); });
-            await page.waitForTimeout(200);
+            await page.waitForTimeout(600);
             let sG1 = await page.evaluate(() => API.getGameState());
             assert(sG1 === 'PAUSED', `Game should be PAUSED after hidden`);
             
             await page.evaluate(() => { API.simulateVisibilityVisible(); });
-            await page.waitForTimeout(200);
+            await page.waitForTimeout(600);
             let sG2 = await page.evaluate(() => API.getGameState());
             assert(sG2 === 'PAUSED', `Game should remain PAUSED after visible (waiting for overlay click)`);
             
@@ -262,14 +262,14 @@ const baseURL = 'http://localhost:3000/';
                 const pauseScene = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PauseScene');
                 pauseScene.scene.resume('GameScene'); pauseScene.scene.stop();
             });
-            await page.waitForTimeout(200);
+            await page.waitForTimeout(600);
             let sG3 = await page.evaluate(() => API.getGameState());
             assert(sG3 === 'RUNNING', `Game should be RUNNING after RESUME click`);
 
             // === TEST I: Combo Timeout ===
             console.log('\\n--- Test I: Combo Timeout ---');
             await page.evaluate(() => { API.restartGame(); });
-            await page.waitForTimeout(1000);
+            await page.waitForTimeout(3000);
             await page.evaluate(() => { window.API = window.__NUMBER_SNAKE_DEBUG__; window.API.stopSpawning(); });
             await cleanEnemies();
             await page.evaluate(() => { 
@@ -281,7 +281,7 @@ const baseURL = 'http://localhost:3000/';
             let combo1 = await page.evaluate(() => window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene').comboCount);
             assert(combo1 === 1, `Combo should be 1, got ${combo1}`);
             
-            await page.waitForTimeout(2600); // Wait for combo timeout
+            await page.waitForTimeout(7800); // Wait for combo timeout
             await page.evaluate(() => { 
                 let pos = API.getPlayerPos();
                 let e = API.spawnEnemy(1, pos.x, pos.y); 
@@ -294,7 +294,7 @@ const baseURL = 'http://localhost:3000/';
             // === TEST J: Real Keyboard Control E2E ===
             console.log('\\n--- Test J: Real Keyboard Control ---');
             await page.evaluate(() => { API.restartGame(); });
-            await page.waitForTimeout(1000);
+            await page.waitForTimeout(3000);
             await page.evaluate(() => { window.API = window.__NUMBER_SNAKE_DEBUG__; window.API.stopSpawning(); });
             
             const keys = [
@@ -313,14 +313,14 @@ const baseURL = 'http://localhost:3000/';
                 let cur1 = await page.evaluate(() => API.getCurrentAngle());
                 
                 await page.keyboard.down(t.k);
-                await page.waitForTimeout(300);
+                await page.waitForTimeout(900);
                 
                 let target2 = await page.evaluate(() => API.getTargetAngle());
                 let cur2 = await page.evaluate(() => API.getCurrentAngle());
                 let pos2 = await page.evaluate(() => API.getPlayerPosition());
                 
                 await page.keyboard.up(t.k);
-                await page.waitForTimeout(100);
+                await page.waitForTimeout(300);
 
                 assert(Math.abs(target2 - t.angle) < 0.1 || (Math.abs(t.angle) === Math.PI && Math.abs(target2) === Math.PI), `Key ${t.k} targetAngle should be ${t.angle}, got ${target2}`);
                 assert(cur1 !== cur2, `Key ${t.k} currentAngle should move`);
@@ -340,23 +340,23 @@ const baseURL = 'http://localhost:3000/';
                 console.log(`Testing viewport ${v.width}x${v.height}`);
                 await page.setViewportSize(v);
                 await page.evaluate(() => { API.restartGame(); });
-                await page.waitForTimeout(1000);
+                await page.waitForTimeout(3000);
                 await page.evaluate(() => { window.API = window.__NUMBER_SNAKE_DEBUG__; window.API.stopSpawning(); });
                 
                 // Boost E2E
                 let initialBoost = await page.evaluate(() => API.getBoostEnergy());
                 let pos1 = await page.evaluate(() => API.getPlayerPosition());
-                await page.waitForTimeout(300);
+                await page.waitForTimeout(900);
                 let pos2 = await page.evaluate(() => API.getPlayerPosition());
                 let speedNormal = await page.evaluate(() => API.getPlayerSpeed());
                 
                 await page.mouse.move(v.width - 70, v.height - 70);
                 await page.mouse.down();
-                await page.waitForTimeout(300);
+                await page.waitForTimeout(900);
                 
                 let midBoost = await page.evaluate(() => API.getBoostEnergy());
                 let pos3 = await page.evaluate(() => API.getPlayerPosition());
-                await page.waitForTimeout(300);
+                await page.waitForTimeout(900);
                 let pos4 = await page.evaluate(() => API.getPlayerPosition());
                 let speedBoost = await page.evaluate(() => API.getPlayerSpeed());
                 
@@ -364,7 +364,7 @@ const baseURL = 'http://localhost:3000/';
                 assert(speedBoost > speedNormal, `Speed should increase on ${v.width}, got boost ${speedBoost} normal ${speedNormal}`);
                 
                 await page.mouse.up();
-                await page.waitForTimeout(600);
+                await page.waitForTimeout(1800);
                 let endBoost = await page.evaluate(() => API.getBoostEnergy());
                 assert(endBoost > midBoost, `Boost energy should recover on ${v.width}, got ${endBoost} > ${midBoost}`);
 
@@ -373,7 +373,7 @@ const baseURL = 'http://localhost:3000/';
                 await page.mouse.move(80, v.height - 80);
                 await page.mouse.down();
                 await page.mouse.move(80, v.height - 180, { steps: 5 }); // drag UP
-                await page.waitForTimeout(300);
+                await page.waitForTimeout(900);
                 
                 let jTarget = await page.evaluate(() => API.getTargetAngle());
                 let jCur = await page.evaluate(() => API.getCurrentAngle());
@@ -389,27 +389,27 @@ const baseURL = 'http://localhost:3000/';
             console.log('\\n--- Test M: Restart 10 Leak Test ---');
             await page.setViewportSize({ width: 1024, height: 768 });
             await page.evaluate(() => { API.restartGame(); });
-            await page.waitForTimeout(1000);
+            await page.waitForTimeout(3000);
             
             let listenersBase = await page.evaluate(() => window.__NUMBER_SNAKE_DEBUG__.getResizeListenerCount());
             
             for(let i=0; i<10; i++) {
                 await page.evaluate(() => { API.restartGame(); });
-                await page.waitForTimeout(300);
+                await page.waitForTimeout(900);
             }
             
             let listenersEnd = await page.evaluate(() => window.__NUMBER_SNAKE_DEBUG__.getResizeListenerCount());
             assert(listenersEnd === listenersBase, `Resize listeners leaked! Initial: ${listenersBase}, Final: ${listenersEnd}`);
             
             await page.keyboard.down('ArrowLeft');
-            await page.waitForTimeout(200);
+            await page.waitForTimeout(600);
             let tAngle = await page.evaluate(() => API.getTargetAngle());
             assert(tAngle === Math.PI || tAngle === -Math.PI, `Keyboard after restart failed, got ${tAngle}`);
             await page.keyboard.up('ArrowLeft');
 
             let startBoost = await page.evaluate(() => API.getBoostEnergy());
             await page.keyboard.down(' ');
-            await page.waitForTimeout(200);
+            await page.waitForTimeout(600);
             let endBoost = await page.evaluate(() => API.getBoostEnergy());
             assert(endBoost < startBoost, `Boost after restart failed, got ${endBoost} < ${startBoost}`);
             await page.keyboard.up(' ');

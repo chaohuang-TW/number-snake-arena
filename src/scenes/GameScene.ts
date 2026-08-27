@@ -108,6 +108,7 @@ export class GameScene extends Phaser.Scene {
                 setPlayerHP: (val: number) => { this.player.hp = val; this.player.isInvulnerable = false; },
                 getBodySegments: () => this.player.segments,
                 getPlayerPosition: () => ({ x: this.player.head.x, y: this.player.head.y }),
+                getPlayerSpeed: () => this.player.head.body ? (this.player.head.body as Phaser.Physics.Arcade.Body).speed : 0,
                 getCurrentAngle: () => this.player.currentAngle,
                 getTargetAngle: () => this.player.targetAngle,
                 getBoostEnergy: () => this.player.boostEnergy,
@@ -145,7 +146,7 @@ export class GameScene extends Phaser.Scene {
                     this.handleVisibilityChange();
                 },
                 getResizeListenerCount: () => this.scale.listenerCount('resize'),
-                stopSpawning: () => { this.spawnTimer = 9999999; },
+                stopSpawning: () => { this.spawnTimer = 9999999; for (const e of this.enemies) { e.destroy(); } this.enemies = []; },
                 getPlayerPos: () => ({ x: this.player.head.x, y: this.player.head.y }),
                 restartGame: () => { this.scene.start('GameScene'); }
             };

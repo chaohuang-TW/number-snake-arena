@@ -348,7 +348,7 @@ const baseURL = 'http://localhost:3000/';
                 let pos1 = await page.evaluate(() => API.getPlayerPosition());
                 await page.waitForTimeout(300);
                 let pos2 = await page.evaluate(() => API.getPlayerPosition());
-                let speedNormal = Math.hypot(pos2.x - pos1.x, pos2.y - pos1.y);
+                let speedNormal = await page.evaluate(() => API.getPlayerSpeed());
                 
                 await page.mouse.move(v.width - 70, v.height - 70);
                 await page.mouse.down();
@@ -358,7 +358,7 @@ const baseURL = 'http://localhost:3000/';
                 let pos3 = await page.evaluate(() => API.getPlayerPosition());
                 await page.waitForTimeout(300);
                 let pos4 = await page.evaluate(() => API.getPlayerPosition());
-                let speedBoost = Math.hypot(pos4.x - pos3.x, pos4.y - pos3.y);
+                let speedBoost = await page.evaluate(() => API.getPlayerSpeed());
                 
                 assert(midBoost < initialBoost, `Boost energy should decrease on ${v.width}, got ${midBoost}`);
                 assert(speedBoost > speedNormal, `Speed should increase on ${v.width}, got boost ${speedBoost} normal ${speedNormal}`);

@@ -1,15 +1,15 @@
 import Phaser from 'phaser';
 import { PlayerSnake } from '../entities/PlayerSnake';
-import { Boss100 } from '../entities/Boss100';
+import { NumberBoss } from '../entities/NumberBoss';
 
 export class DebugUI {
     scene: Phaser.Scene;
     text: Phaser.GameObjects.Text;
     player: PlayerSnake;
     getEnemiesCount: () => number;
-    getBoss: () => Boss100 | null;
+    getBoss: () => NumberBoss | null;
 
-    constructor(scene: Phaser.Scene, player: PlayerSnake, getEnemiesCount: () => number, getBoss: () => Boss100 | null) {
+    constructor(scene: Phaser.Scene, player: PlayerSnake, getEnemiesCount: () => number, getBoss: () => NumberBoss | null) {
         this.scene = scene;
         this.player = player;
         this.getEnemiesCount = getEnemiesCount;

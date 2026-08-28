@@ -44,10 +44,11 @@ export class HUD {
         this.boostButton.on('pointerupoutside', () => this.isBoostPressed = false);
     }
 
-    update(hp: number, boostEnergy: number, maxBoostEnergy: number) {
+    update(hp: number, maxHP: number, boostEnergy: number, maxBoostEnergy: number) {
         // HP
         let hearts = '';
         for (let i = 0; i < hp; i++) hearts += '❤️';
+        for (let i = hp; i < maxHP; i++) hearts += '🖤';
         this.hpText.setText(hearts);
 
         // Boost Bar

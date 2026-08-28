@@ -1,7 +1,9 @@
 import Phaser from 'phaser';
 import { PlayerSnake } from '../entities/PlayerSnake';
 import { NumberEnemy } from '../entities/NumberEnemy';
-import { Boss100 } from '../entities/Boss100';
+import { NumberBoss } from '../entities/NumberBoss';
+import { ProgressionManager } from '../models/Progression';
+import { getLevel, type LevelDefinition } from '../config/levels';
 import { VirtualJoystick } from '../ui/VirtualJoystick';
 import { HUD } from '../ui/HUD';
 import { AudioSystem } from '../systems/AudioSystem';
@@ -12,7 +14,7 @@ import { DebugUI } from '../ui/DebugUI';
 export class GameScene extends Phaser.Scene {
     player!: PlayerSnake;
     enemies: NumberEnemy[] = [];
-    boss: Boss100 | null = null;
+    boss: NumberBoss | null = null;
     
     joystick!: VirtualJoystick;
     hud!: HUD;
@@ -34,6 +36,8 @@ export class GameScene extends Phaser.Scene {
     comboCount: number = 0;
     lastEatTime: number = 0;
     bossSpawned: boolean = false;
+    levelId: number = 1;
+    levelDef!: LevelDefinition;
     gameState: string = 'RUNNING';
 
     // Background grid
@@ -48,6 +52,12 @@ export class GameScene extends Phaser.Scene {
 
     constructor() {
         super('GameScene');
+    }
+
+    init(data: any) {
+        this.levelId = data?.levelId || 1;
+        ProgressionManager.load();
+        this.levelDef = getLevel(this.levelId);
     }
 
     create() {
@@ -104,6 +114,13 @@ export class GameScene extends Phaser.Scene {
             (window as any).__NUMBER_SNAKE_DEBUG__ = {
                 getPlayerValue: () => this.player.value,
                 setPlayerValue: (val: number) => { this.player.value = val; },
+                getCurrentLevel: () => this.levelId,
+                startLevel: (id: number) => this.scene.start('GameScene', { levelId: id }),
+                getMaxHP: () => ProgressionManager.getMaxHP(),
+                getHP: () => this.player.hp,
+                getProgression: () => ProgressionManager._getData(),
+                resetProgressionForTest: () => ProgressionManager.reset(),
+                forceLevelClear: () => this.levelClear(),
                 getPlayerHP: () => this.player.hp,
                 setPlayerHP: (val: number) => { this.player.hp = val; this.player.isInvulnerable = false; this.lastEatTime = 0; },
                 getBodySegments: () => this.player.segments,
@@ -134,7 +151,7 @@ export class GameScene extends Phaser.Scene {
                     if (this.boss) this.handleBossCollision();
                 },
                 getGameState: () => {
-                    if (this.gameState === 'GAME_OVER' || this.gameState === 'VICTORY') return this.gameState;
+                    if (this.gameState === 'GAME_OVER' || this.gameState === 'VICTORY' || this.gameState === 'LEVEL_CLEAR') return this.gameState;
                     return this.scene.isPaused('GameScene') ? 'PAUSED' : 'RUNNING';
                 },
                 simulateVisibilityHidden: () => {
@@ -150,8 +167,8 @@ export class GameScene extends Phaser.Scene {
                 getPlayerPos: () => ({ x: this.player.head.x, y: this.player.head.y }),
                 restartGame: () => { this.scene.start('GameScene'); },
                 hardReset: () => {
-                    this.player.value = 5;
-                    this.player.hp = 3;
+                    this.player.value = this.levelDef.startValue;
+                    this.player.hp = ProgressionManager.getMaxHP();
                     this.player.segments = 5;
                     this.player.boostEnergy = 100;
                     this.comboCount = 0;
@@ -312,7 +329,7 @@ export class GameScene extends Phaser.Scene {
             this.debugUI.update();
         }
 
-        this.hud.update(this.player.hp, this.player.boostEnergy, GameBalance.player.maxBoostEnergy);
+        this.hud.update(this.player.hp, ProgressionManager.getMaxHP(), this.player.boostEnergy, GameBalance.player.maxBoostEnergy);
     }
 
     spawnEnemy(isRescue = false) {
@@ -398,10 +415,10 @@ export class GameScene extends Phaser.Scene {
         sx = Phaser.Math.Clamp(sx, -hw, hw);
         sy = Phaser.Math.Clamp(sy, -hh, hh);
 
-        this.boss = new Boss100(this, sx, sy);
+        this.boss = new NumberBoss(this, sx, sy, this.levelDef.bossValue);
         this.audio.playBossAlert();
         
-        const alert = this.add.text(this.player.head.x, this.player.head.y - 100, '100 APPEARED!', {
+        const alert = this.add.text(this.player.head.x, this.player.head.y - 100, `${this.levelDef.bossValue} APPEARED!`, {
             fontSize: '48px', fontStyle: 'bold', color: '#ff0000'
         }).setOrigin(0.5).setDepth(200);
         
@@ -425,8 +442,8 @@ export class GameScene extends Phaser.Scene {
             // Reversal cue check inside update is enough, but maybe text cue?
             const oldVal = this.player.value - e.value;
             // Check if this eat makes any current hunter flee
-            if (this.boss && this.player.value > 100 && oldVal <= 100) {
-                this.showReversalText('NOW HUNT 100!');
+            if (this.boss && this.player.value > this.levelDef.bossValue && oldVal <= this.levelDef.bossValue) {
+                this.showReversalText(`NOW HUNT ${this.levelDef.bossValue}!`);
                 this.audio.playBossReversal();
             }
 
@@ -460,7 +477,7 @@ export class GameScene extends Phaser.Scene {
             this.createParticles(this.player.head.x, this.player.head.y, 0xff0055, 50);
             this.audio.playEatSFX(10);
             this.hud.addScore(1000);
-            this.victory();
+            this.levelClear();
         } else if (!this.player.isInvulnerable) {
             // DAMAGE
             const dmg = calculateDamage(this.player.value, this.boss!.value);
@@ -503,6 +520,109 @@ export class GameScene extends Phaser.Scene {
         emitter.setDepth(150);
         emitter.explode(count);
         setTimeout(() => emitter.destroy(), 600);
+    }
+
+    
+    levelClear() {
+        this.gameState = 'LEVEL_CLEAR';
+        this.saveScore();
+        
+        // Handle progression
+        let newlyUnlocked = false;
+        let newlyClaimedReward = false;
+        
+        if (this.levelDef.reward) {
+            newlyClaimedReward = ProgressionManager.claimReward(this.levelDef.reward.id, this.levelDef.reward.value);
+        }
+        
+        if (this.levelDef.nextLevelId) {
+            newlyUnlocked = ProgressionManager.unlockLevel(this.levelDef.nextLevelId);
+        }
+
+        // Delay slightly for boss defeat FX
+        this.time.delayedCall(400, () => {
+            this.showLevelClearScreen(newlyClaimedReward, newlyUnlocked);
+        });
+    }
+
+    showLevelClearScreen(newlyClaimedReward: boolean, newlyUnlocked: boolean) {
+        const cx = this.cameras.main.scrollX + this.scale.width / 2;
+        const cy = this.cameras.main.scrollY + this.scale.height / 2;
+
+        const bg = this.add.graphics();
+        bg.fillStyle(0x000000, 0.85);
+        bg.fillRect(this.cameras.main.scrollX, this.cameras.main.scrollY, this.scale.width, this.scale.height);
+        bg.setDepth(300);
+
+        this.add.text(cx, cy - 140, `${this.levelDef.name} CLEAR!`, { fontSize: '56px', fontStyle: 'bold', color: '#00ff00' }).setOrigin(0.5).setDepth(301);
+        
+        let currentY = cy - 40;
+        
+        if (newlyClaimedReward) {
+            this.add.text(cx, currentY, '+1 HEART', { fontSize: '32px', fontStyle: 'bold', color: '#ff5555' }).setOrigin(0.5).setDepth(301);
+            const oldMax = ProgressionManager.getMaxHP() - this.levelDef.reward!.value;
+            let heartStr = '';
+            for(let i=0; i<oldMax; i++) heartStr += '❤️';
+            const heartText = this.add.text(cx, currentY + 40, heartStr, { fontSize: '32px' }).setOrigin(0.5).setDepth(301);
+            
+            // Animate reward
+            this.time.delayedCall(800, () => {
+                heartStr += '❤️';
+                heartText.setText(heartStr);
+                // quick scale bounce
+                this.tweens.add({
+                    targets: heartText,
+                    scale: 1.5,
+                    yoyo: true,
+                    duration: 150,
+                    onComplete: () => {
+                        if (newlyUnlocked) {
+                            this.time.delayedCall(400, () => {
+                                this.add.text(cx, currentY + 100, `LEVEL ${this.levelDef.nextLevelId} UNLOCKED!`, { fontSize: '36px', fontStyle: 'bold', color: '#00ffff' }).setOrigin(0.5).setDepth(301);
+                                this.createLevelClearButtons(cx, cy + 180);
+                            });
+                        } else {
+                            this.createLevelClearButtons(cx, cy + 180);
+                        }
+                    }
+                });
+            });
+        } else {
+            if (newlyUnlocked) {
+                this.add.text(cx, currentY + 60, `LEVEL ${this.levelDef.nextLevelId} UNLOCKED!`, { fontSize: '36px', fontStyle: 'bold', color: '#00ffff' }).setOrigin(0.5).setDepth(301);
+            }
+            this.time.delayedCall(500, () => {
+                this.createLevelClearButtons(cx, cy + 140);
+            });
+        }
+    }
+
+    createLevelClearButtons(cx: number, cy: number) {
+        if (this.levelDef.nextLevelId && ProgressionManager.getHighestUnlockedLevel() >= this.levelDef.nextLevelId) {
+            const nextBtn = this.add.text(cx, cy - 60, 'NEXT LEVEL', {
+                fontSize: '32px', backgroundColor: '#00aa00', padding: { x: 20, y: 10 }
+            }).setOrigin(0.5).setDepth(301).setInteractive({ useHandCursor: true });
+            
+            nextBtn.on('pointerdown', () => {
+                this.scene.start('GameScene', { levelId: this.levelDef.nextLevelId });
+            });
+        }
+
+        const replayBtn = this.add.text(cx, cy, 'REPLAY LEVEL', {
+            fontSize: '24px', backgroundColor: '#555555', padding: { x: 15, y: 8 }
+        }).setOrigin(0.5).setDepth(301).setInteractive({ useHandCursor: true });
+        
+        replayBtn.on('pointerdown', () => {
+            this.scene.start('GameScene', { levelId: this.levelId });
+        });
+
+        const menuBtn = this.add.text(cx, cy + 60, 'MENU', {
+            fontSize: '24px', backgroundColor: '#0055aa', padding: { x: 15, y: 8 }
+        }).setOrigin(0.5).setDepth(301).setInteractive({ useHandCursor: true });
+        
+        menuBtn.on('pointerdown', () => {
+            this.scene.start('MenuScene');
+        });
     }
 
     gameOver() {

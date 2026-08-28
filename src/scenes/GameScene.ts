@@ -105,7 +105,7 @@ export class GameScene extends Phaser.Scene {
                 getPlayerValue: () => this.player.value,
                 setPlayerValue: (val: number) => { this.player.value = val; },
                 getPlayerHP: () => this.player.hp,
-                setPlayerHP: (val: number) => { this.player.hp = val; this.player.isInvulnerable = false; },
+                setPlayerHP: (val: number) => { this.player.hp = val; this.player.isInvulnerable = false; this.lastEatTime = 0; },
                 getBodySegments: () => this.player.segments,
                 getPlayerPosition: () => ({ x: this.player.head.x, y: this.player.head.y }),
                 getPlayerSpeed: () => this.player.head.body ? (this.player.head.body as Phaser.Physics.Arcade.Body).speed : 0,

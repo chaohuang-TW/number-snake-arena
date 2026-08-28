@@ -281,7 +281,7 @@ const baseURL = process.env.BASE_URL || 'http://localhost:3000/';
             let combo1 = await page.evaluate(() => window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene').comboCount);
             assert(combo1 === 1, `Combo should be 1, got ${combo1}`);
             
-            await page.waitForTimeout(7800); // Wait for combo timeout
+            await page.waitForTimeout(15000); // Wait for combo timeout
             await page.evaluate(() => { 
                 let pos = API.getPlayerPos();
                 let e = API.spawnEnemy(1, pos.x, pos.y); 

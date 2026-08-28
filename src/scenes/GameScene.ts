@@ -148,7 +148,19 @@ export class GameScene extends Phaser.Scene {
                 getResizeListenerCount: () => this.scale.listenerCount('resize'),
                 stopSpawning: () => { this.spawnTimer = 9999999; for (const e of this.enemies) { e.destroy(); } this.enemies = []; },
                 getPlayerPos: () => ({ x: this.player.head.x, y: this.player.head.y }),
-                restartGame: () => { this.scene.start('GameScene'); }
+                restartGame: () => { this.scene.start('GameScene'); },
+                hardReset: () => {
+                    this.player.value = 5;
+                    this.player.hp = 3;
+                    this.player.segments = 5;
+                    this.player.boostEnergy = 100;
+                    this.comboCount = 0;
+                    this.player.isInvulnerable = false;
+                    for (const e of this.enemies) { e.destroy(); }
+                    this.enemies = [];
+                    if (this.boss) { this.boss.destroy(); this.boss = null; this.bossSpawned = false; }
+                    this.spawnTimer = 9999999;
+                }
             };
         } else {
             // Ensure no debug API exists in normal mode

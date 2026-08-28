@@ -88,7 +88,8 @@ export class GameScene extends Phaser.Scene {
         this.grid = this.add.grid(0, 0, ww, wh, 100, 100, 0x000000, 0, 0x333333, 0.2);
         this.grid.setDepth(-11);
 
-        this.player = new PlayerSnake(this, 0, 0);
+        const maxHP = ProgressionManager.getMaxHP();
+        this.player = new PlayerSnake(this, 0, 0, this.levelDef.startValue, maxHP);
         this.cameras.main.startFollow(this.player.head, true, 0.1, 0.1);
         this.cameras.main.setZoom(1);
 
@@ -219,7 +220,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     update(time: number, dt: number) {
-        if (this.gameState === 'GAME_OVER' || this.gameState === 'VICTORY') return;
+        if (this.gameState === 'GAME_OVER' || this.gameState === 'VICTORY' || this.gameState === 'LEVEL_CLEAR') return;
 
         let dx = 0;
         let dy = 0;
@@ -276,7 +277,7 @@ export class GameScene extends Phaser.Scene {
                     }
                 }
             });
-            if (edibleCount < 4 && this.enemies.length < GameBalance.enemy.normalMaxLimit) {
+            if (edibleCount < 4 && this.enemies.length < this.levelDef.normalEnemyMax) {
                 this.spawnEnemy(true);
             }
         }
@@ -307,7 +308,7 @@ export class GameScene extends Phaser.Scene {
 
         // Boss Logic
 
-        if (this.player.value >= GameBalance.boss.triggerValue && !this.bossSpawned) {
+        if (this.player.value >= this.levelDef.bossTriggerValue && !this.bossSpawned) {
             this.spawnBoss();
         }
 
@@ -320,7 +321,7 @@ export class GameScene extends Phaser.Scene {
 
         // Spawning
         this.spawnTimer -= dt;
-        if (this.spawnTimer <= 0 && this.enemies.length < GameBalance.enemy.normalMaxLimit) {
+        if (this.spawnTimer <= 0 && this.enemies.length < this.levelDef.normalEnemyMax) {
             this.spawnEnemy();
             this.spawnTimer = 500;
         }
@@ -359,12 +360,14 @@ export class GameScene extends Phaser.Scene {
             } else {
                 role = 'giant';
                 val = Math.floor(pVal * 2.5 + Math.random() * (pVal * 0.5));
+                
+                // Keep some early hunters
                 if (gameTime < 15000) {
                     role = 'hunter';
                     val = Math.floor(pVal + Math.random() * (pVal * 0.6));
                 }
             }
-            if (val > 99) val = 99;
+            if (val > this.levelDef.normalEnemyMax) val = this.levelDef.normalEnemyMax;
         }
 
         let range = { min: GameBalance.enemy.spawnRanges.edible.min, max: GameBalance.enemy.spawnRanges.edible.max };
@@ -641,8 +644,11 @@ export class GameScene extends Phaser.Scene {
 
     saveScore() {
         const s = this.hud.getScore();
+        // Legacy
         const b = parseInt(localStorage.getItem('bestScore') || '0', 10);
         if (s > b) localStorage.setItem('bestScore', s.toString());
+        // Progression Manager
+        ProgressionManager.submitScore(this.levelId, s);
     }
 
     showEndScreen(title: string, color: string) {

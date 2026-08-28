@@ -27,10 +27,10 @@ export class PlayerSnake {
     
     public targetAngle: number = 0;
 
-    constructor(scene: Phaser.Scene, x: number, y: number) {
+    constructor(scene: Phaser.Scene, x: number, y: number, initialValue: number, initialHP: number) {
         this.scene = scene;
-        this.value = GameBalance.player.initialValue;
-        this.hp = GameBalance.player.initialHP;
+        this.value = initialValue;
+        this.hp = initialHP;
         this.segments = GameBalance.player.initialSegments;
         this.boostEnergy = GameBalance.player.maxBoostEnergy;
 

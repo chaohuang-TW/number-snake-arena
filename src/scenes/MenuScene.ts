@@ -42,6 +42,9 @@ export class MenuScene extends Phaser.Scene {
         }
 
         this.scale.on('resize', this.resize, this);
+        this.events.once('shutdown', () => {
+            this.scale.off('resize', this.resize, this);
+        });
     }
 
     createLevelCards(cx: number, cy: number) {

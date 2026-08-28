@@ -1,70 +1,35 @@
-# Number Snake Arena v0.2.0
+# Number Snake Arena v0.2.1
 
-A modern HTML5 arcade game where you play as a number snake. Eat smaller numbers to grow, avoid larger numbers to survive. Features dynamic role reversal where hunters become prey as you grow!
-
-## Live Demo
-
-Play the game now: [https://chaohuang-TW.github.io/number-snake-arena/](https://chaohuang-TW.github.io/number-snake-arena/)
+A web-based arcade game where you control a snake of numbers, growing by eating smaller numbers while avoiding larger ones.
 
 ## Gameplay
 
-- **Grow to Survive**: Start as the number 5. Eat enemies with a value strictly less than yours to increase your body segments and value by the amount eaten.
-- **Dynamic Role Reversal**: Enemies larger than you will hunt you (red color). Enemies smaller than you will flee (green color). When you grow larger than a hunter, they will immediately turn green and run away!
-- **Boss Fight**: Reach a value of 70 to summon the legendary Boss 100. Reach 101 to make it vulnerable, eat it, and claim victory!
-- **Boost**: Hold the Boost button to increase your speed, consuming energy. Release to recharge.
+* **Grow**: Eat numbers strictly smaller than your current value to grow.
+* **Survive**: Touching a larger number causes you to lose HP and shrink.
+* **Role Reversal**: If you grow larger than a previously dangerous number, it will start fleeing from you!
+* **Combo**: Eat numbers in quick succession to build a multiplier and grow faster.
+* **Boost**: Hold Spacebar or the virtual Boost button to consume boost energy for a burst of speed.
+* **Level Progression**: Complete levels by growing and defeating the Boss.
+
+## Levels
+
+* **Level Select**: Unlock levels as you play.
+* **Level 1**: Start at value 5, 3 Hearts. Grow to 70+ to summon Boss 100. Grow beyond 100 to eat the Boss!
+* **First Clear Reward**: Defeating Boss 100 for the first time grants +1 permanent Max Heart.
+* **Level 2**: Unlocks after Level 1. Start at value 5 with 4 Hearts. Grow to 150+ to summon Boss 200. Grow beyond 200 to eat the Boss!
+* **LocalStorage Progression**: Your progression and per-level best scores are automatically saved to your browser.
 
 ## Controls
 
-### Desktop
-- **Move**: `W` `A` `S` `D` or Arrow Keys
-- **Boost**: Spacebar
-
-### Mobile / Touch
-- **Move**: On-screen Virtual Joystick (multi-touch supported)
-- **Boost**: On-screen BOOST button
-
-*Note on Mobile testing: Responsive behavior and virtual controls are heavily verified via automated browser emulation (Playwright). True physical hardware device testing (e.g. real iPhone Safari, Android Chrome, iPad Safari) has not been exhaustively performed.*
+* **Keyboard**: W/A/S/D or Arrow Keys to move. Spacebar to Boost.
+* **Touch/Mobile**: Drag anywhere on the left side of the screen for a virtual joystick. Tap the BOOST button on the right to speed up.
 
 ## Development
 
-Built with:
-- [Phaser 4.2.1](https://phaser.io/)
-- [Vite](https://vitejs.dev/)
-- [TypeScript](https://www.typescriptlang.org/)
-- Web Audio API (Synthesized SFX)
-
-## Tests
-
-The project includes a robust test suite for game logic and end-to-end browser regression.
-
 ```bash
-# Install dependencies
 npm install
-
-# Run unit tests (Core game logic, damage rules, physics helpers)
-npm run test
-
-# Run local end-to-end browser tests (Requires a local dev server running, simulates gameplay locally)
-npm run test:e2e
-
-# Run production end-to-end browser tests (Tests the live GitHub Pages URL with the exact same E2E suite)
-npm run test:prod
-```
-
-## Build
-
-To build the game for production:
-
-```bash
+npm run dev
+npm run test      # run unit tests
+npm run test:e2e  # run E2E tests (requires running dev server on localhost:3000)
 npm run build
 ```
-
-The output will be generated in the `dist` folder.
-
-## Deployment
-
-This project uses GitHub Actions for continuous deployment.
-Every push to the `main` branch automatically runs tests and deploys the production build to GitHub Pages.
-
----
-*Developed autonomously via Google Antigravity.*

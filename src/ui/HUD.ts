@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { isTouchCapableDevice } from '../utils/device';
 
 export class HUD {
     scene: Phaser.Scene;
@@ -79,18 +80,14 @@ export class HUD {
 
     resize(gameSize: Phaser.Structs.Size) {
         if (this.boostButton) {
-            const bx = gameSize.width - 80;
-            const by = gameSize.height - 80;
+            const bx = gameSize.width - 90;
+            const by = gameSize.height - 90;
             this.boostButton.setPosition(bx, by);
             this.boostButtonText.setPosition(bx, by);
-            // Hide on desktop viewports
-            if (gameSize.width > 768) {
-                this.boostButton.setVisible(false);
-                this.boostButtonText.setVisible(false);
-            } else {
-                this.boostButton.setVisible(true);
-                this.boostButtonText.setVisible(true);
-            }
+            // Show on touch-capable devices, hide on desktop
+            const isTouch = isTouchCapableDevice();
+            this.boostButton.setVisible(isTouch);
+            this.boostButtonText.setVisible(isTouch);
         }
     }
 }

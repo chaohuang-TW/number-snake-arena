@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { isTouchCapableDevice } from '../utils/device';
 
 export class VirtualJoystick {
     scene: Phaser.Scene;
@@ -30,6 +31,7 @@ export class VirtualJoystick {
     }
 
     onPointerDown(pointer: Phaser.Input.Pointer) {
+        if (!isTouchCapableDevice()) return;
         // Only activate if pointer is on the left half of the screen
         if (pointer.x < this.scene.scale.width / 2) {
             this.active = true;
@@ -80,6 +82,10 @@ export class VirtualJoystick {
     }
 
     resize(gameSize: Phaser.Structs.Size) {
+        const isTouch = isTouchCapableDevice();
+        this.base.setVisible(isTouch);
+        this.thumb.setVisible(isTouch);
+
         // Reset base position to bottom left area
         this.base.setPosition(100, gameSize.height - 100);
         this.thumb.setPosition(100, gameSize.height - 100);

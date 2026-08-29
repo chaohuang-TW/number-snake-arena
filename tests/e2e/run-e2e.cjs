@@ -4,7 +4,7 @@ const baseURL = process.env.BASE_URL || 'http://localhost:3000/';
 
 (async () => {
     const browser = await chromium.launch({ headless: true });
-    const context = await browser.newContext();
+    const context = await browser.newContext({ hasTouch: true });
     const page = await context.newPage();
     
     let totalErrors = 0;
@@ -817,6 +817,227 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
 
     await runTests();
     
+    
+            // === Test W: Tablet Touch Capabilities ===
+            console.log('\n--- Test W: Tablet Touch Capabilities ---');
+            
+            const tabletViewports = [
+                { width: 810, height: 1080 },
+                { width: 820, height: 1180 },
+                { width: 834, height: 1194 },
+                { width: 1024, height: 1366 },
+                { width: 1080, height: 810 },
+                { width: 1180, height: 820 },
+                { width: 1194, height: 834 },
+                { width: 1366, height: 1024 }
+            ];
+
+            for (const v of tabletViewports) {
+                console.log(`Testing Tablet ${v.width}x${v.height}`);
+                const tabletContext = await browser.newContext({
+                    hasTouch: true,
+                    viewport: v
+                });
+                const tPage = await tabletContext.newPage();
+                tPage.on("console", msg => console.log("TABLET:", msg.text()));
+                await tPage.goto(baseURL + "?debug=1", { waitUntil: 'networkidle' });
+                await tPage.waitForTimeout(6000);
+                await tPage.evaluate(() => { window.__PHASER_GAME__.scene.scenes[0].scene.start('GameScene'); });
+                await tPage.waitForTimeout(3000);
+
+                let boostVisible = await tPage.evaluate(() => {
+                    const scene = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+                    const hud = scene.hud;
+                    return hud.boostButton && hud.boostButton.visible;
+                });
+                if (!boostVisible) {
+                    console.error(`❌ ASSERT FAILED: BOOST should be visible on tablet ${v.width}x${v.height}`);
+                    totalErrors++;
+                } else {
+                    console.log(`✅ ASSERT OK: BOOST should be visible on tablet ${v.width}x${v.height}`);
+                }
+
+                let joystickVisible = await tPage.evaluate(() => {
+                    const scene = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+                    return scene.joystick && scene.joystick.base.visible;
+                });
+                if (!joystickVisible) {
+                    console.error(`❌ ASSERT FAILED: Joystick should be visible on tablet ${v.width}x${v.height}`);
+                    totalErrors++;
+                } else {
+                    console.log(`✅ ASSERT OK: Joystick should be visible on tablet ${v.width}x${v.height}`);
+                }
+                
+                // Assert bounds
+                let outOfBounds = await tPage.evaluate(() => {
+                    const hud = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene').hud;
+                    const bx = hud.boostButton.x;
+                    const by = hud.boostButton.y;
+                    const w = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene').scale.width;
+                    const h = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene').scale.height;
+                    return bx < 0 || by < 0 || bx > w || by > h;
+                });
+                if (outOfBounds) {
+                    console.error(`❌ ASSERT FAILED: BOOST bounds should be inside viewport`);
+                    totalErrors++;
+                } else {
+                    console.log(`✅ ASSERT OK: BOOST bounds should be inside viewport`);
+                }
+
+                // Test input
+                await tPage.evaluate(() => { window.API = window.__NUMBER_SNAKE_DEBUG__; window.API.stopSpawning(); });
+                let initialBoost = await tPage.evaluate(() => API.getBoostEnergy());
+                let speedNormal = await tPage.evaluate(() => API.getPlayerSpeed());
+                
+                // Note: The boost button is at v.width - 90, v.height - 90
+                await tPage.mouse.move(v.width - 90, v.height - 90);
+                await tPage.mouse.down();
+                await tPage.waitForTimeout(900);
+                
+                let midBoost = await tPage.evaluate(() => API.getBoostEnergy());
+                let speedBoost = await tPage.evaluate(() => API.getPlayerSpeed());
+                if (!(midBoost < initialBoost)) { console.error(`❌ ASSERT FAILED: Boost energy should decrease`); totalErrors++; }
+                else console.log(`✅ ASSERT OK: Boost energy should decrease`);
+                if (!(speedBoost > speedNormal)) { console.error(`❌ ASSERT FAILED: Speed should increase`); totalErrors++; }
+                else console.log(`✅ ASSERT OK: Speed should increase`);
+                
+                await tPage.mouse.up();
+                await tPage.waitForTimeout(3000);
+                let endBoost = await tPage.evaluate(() => API.getBoostEnergy());
+                if (!(endBoost > midBoost)) { console.error(`❌ ASSERT FAILED: Boost energy should recover`); totalErrors++; }
+                else console.log(`✅ ASSERT OK: Boost energy should recover`);
+
+                // Joystick E2E
+                let jPos1 = await tPage.evaluate(() => API.getPlayerPosition());
+                await tPage.mouse.move(100, v.height - 100);
+                await tPage.mouse.down();
+                await tPage.mouse.move(100, v.height - 200, { steps: 5 }); // drag UP
+                await tPage.waitForTimeout(900);
+                
+                let jTarget = await tPage.evaluate(() => API.getTargetAngle());
+                let jPos2 = await tPage.evaluate(() => API.getPlayerPosition());
+                await tPage.mouse.up();
+
+                if (!(Math.abs(jTarget - (-Math.PI/2)) < 0.1)) { console.error(`❌ ASSERT FAILED: Joystick UP targetAngle should be ~-1.57`); totalErrors++; }
+                else console.log(`✅ ASSERT OK: Joystick UP targetAngle should be ~-1.57`);
+                if (!(jPos2.y < jPos1.y - 10)) { console.error(`❌ ASSERT FAILED: Joystick actual trajectory should move UP`); totalErrors++; }
+                else console.log(`✅ ASSERT OK: Joystick actual trajectory should move UP`);
+                
+                await tabletContext.close();
+            }
+
+            // === Test X: Desktop Input Isolation ===
+            console.log('\n--- Test X: Desktop Input Isolation ---');
+            const desktopViewports = [
+                { width: 1366, height: 768 },
+                { width: 1920, height: 1080 }
+            ];
+
+            for (const v of desktopViewports) {
+                console.log(`Testing Desktop ${v.width}x${v.height}`);
+                const desktopContext = await browser.newContext({
+                    hasTouch: false,
+                    viewport: v
+                });
+                const dPage = await desktopContext.newPage();
+                await dPage.goto(baseURL + "?debug=1", { waitUntil: 'networkidle' });
+                await dPage.waitForTimeout(6000);
+                await dPage.evaluate(() => { window.__PHASER_GAME__.scene.scenes[0].scene.start('GameScene'); });
+                await dPage.waitForTimeout(3000);
+
+                let boostVisible = await dPage.evaluate(() => {
+                    const scene = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+                    const hud = scene.hud;
+                    return hud.boostButton && hud.boostButton.visible;
+                });
+                // The prompt says "BOOST may remain hidden because Spacebar is available"
+                if (boostVisible) {
+                    console.error(`❌ ASSERT FAILED: BOOST should be hidden on desktop ${v.width}x${v.height}`);
+                    totalErrors++;
+                } else {
+                    console.log(`✅ ASSERT OK: BOOST should be hidden on desktop ${v.width}x${v.height}`);
+                }
+
+                // Desktop Space BOOST
+                await dPage.evaluate(() => { window.API = window.__NUMBER_SNAKE_DEBUG__; window.API.stopSpawning(); });
+                let initialBoost = await dPage.evaluate(() => API.getBoostEnergy());
+                let speedNormal = await dPage.evaluate(() => API.getPlayerSpeed());
+                
+                await dPage.keyboard.down('Space');
+                await dPage.waitForTimeout(900);
+                let midBoost = await dPage.evaluate(() => API.getBoostEnergy());
+                let speedBoost = await dPage.evaluate(() => API.getPlayerSpeed());
+                
+                if (!(midBoost < initialBoost)) { console.error(`❌ ASSERT FAILED: Desktop Space: Boost energy should decrease`); totalErrors++; }
+                else console.log(`✅ ASSERT OK: Desktop Space: Boost energy should decrease`);
+                
+                if (!(speedBoost > speedNormal)) { console.error(`❌ ASSERT FAILED: Desktop Space: Speed should increase`); totalErrors++; }
+                else console.log(`✅ ASSERT OK: Desktop Space: Speed should increase`);
+                
+                await dPage.keyboard.up('Space');
+                
+                await desktopContext.close();
+            }
+
+            // === Test Y: Rotation / Resize ===
+            console.log('\n--- Test Y: Rotation / Resize ---');
+            const rotContext = await browser.newContext({
+                hasTouch: true,
+                viewport: { width: 834, height: 1194 }
+            });
+            const rotPage = await rotContext.newPage();
+            await rotPage.goto(baseURL + "?debug=1", { waitUntil: 'networkidle' });
+            await rotPage.waitForTimeout(6000);
+            await rotPage.evaluate(() => { window.__PHASER_GAME__.scene.scenes[0].scene.start('GameScene'); });
+            await rotPage.waitForTimeout(3000);
+            
+            // rotate to landscape
+            await rotPage.setViewportSize({ width: 1194, height: 834 });
+            await rotPage.waitForTimeout(1000);
+            
+            let isVisible = await rotPage.evaluate(() => {
+                const hud = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene').hud;
+                const js = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene').joystick;
+                return hud.boostButton.visible && js.base.visible;
+            });
+            if (!isVisible) {
+                console.error(`❌ ASSERT FAILED: BOOST and Joystick remain visible after resize to 1194x834`);
+                totalErrors++;
+            } else {
+                console.log(`✅ ASSERT OK: BOOST and Joystick remain visible after resize to 1194x834`);
+            }
+            
+            let outOfBounds = await rotPage.evaluate(() => {
+                const hud = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene').hud;
+                const bx = hud.boostButton.x;
+                const by = hud.boostButton.y;
+                return bx < 0 || by < 0 || bx > 1194 || by > 834;
+            });
+            if (outOfBounds) {
+                console.error(`❌ ASSERT FAILED: BOOST remains inside viewport after resize to 1194x834`);
+                totalErrors++;
+            } else {
+                console.log(`✅ ASSERT OK: BOOST remains inside viewport after resize to 1194x834`);
+            }
+            
+            // rotate back
+            await rotPage.setViewportSize({ width: 834, height: 1194 });
+            await rotPage.waitForTimeout(1000);
+            
+            isVisible = await rotPage.evaluate(() => {
+                const hud = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene').hud;
+                const js = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene').joystick;
+                return hud.boostButton.visible && js.base.visible;
+            });
+            if (!isVisible) {
+                console.error(`❌ ASSERT FAILED: BOOST and Joystick remain visible after resize to 834x1194`);
+                totalErrors++;
+            } else {
+                console.log(`✅ ASSERT OK: BOOST and Joystick remain visible after resize to 834x1194`);
+            }
+
+            await rotContext.close();
+
     console.log(`\n=== FINAL SCRIPT RESULTS ===`);
     console.log(`Total Errors/Failed Asserts: ${totalErrors}`);
     

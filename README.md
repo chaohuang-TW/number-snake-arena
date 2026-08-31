@@ -1,4 +1,6 @@
-# Number Snake Arena v0.2.1
+# Number Snake Arena v0.2.2
+
+No gameplay change. Release reproducibility / E2E deterministic closeout.
 
 A web-based arcade game where you control a snake of numbers, growing by eating smaller numbers while avoiding larger ones.
 

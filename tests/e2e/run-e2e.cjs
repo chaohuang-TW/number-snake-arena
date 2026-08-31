@@ -350,7 +350,7 @@ const baseURL = process.env.BASE_URL || 'http://localhost:3000/';
                 let pos2 = await page.evaluate(() => API.getPlayerPosition());
                 let speedNormal = await page.evaluate(() => API.getPlayerSpeed());
                 
-                await page.mouse.move(v.width - 70, v.height - 70);
+                await page.mouse.move(v.width - 90, v.height - 90);
                 await page.mouse.down();
                 await page.waitForTimeout(900);
                 
@@ -370,9 +370,9 @@ const baseURL = process.env.BASE_URL || 'http://localhost:3000/';
 
                 // Joystick E2E
                 let jPos1 = await page.evaluate(() => API.getPlayerPosition());
-                await page.mouse.move(80, v.height - 80);
+                await page.mouse.move(100, v.height - 100);
                 await page.mouse.down();
-                await page.mouse.move(80, v.height - 180, { steps: 5 }); // drag UP
+                await page.mouse.move(100, v.height - 200, { steps: 5 }); // drag UP
                 await page.waitForTimeout(900);
                 
                 let jTarget = await page.evaluate(() => API.getTargetAngle());
@@ -722,7 +722,7 @@ const baseURL = process.env.BASE_URL || 'http://localhost:3000/';
             let bossUSpawn2 = await page.evaluate(() => window.API.getBossState());
             assert(bossUSpawn2 === 'NONE', `Boss should NOT spawn at 149 in Level 2`);
             
-            await page.evaluate(() => { window.API.setPlayerValue(150); });
+            await page.evaluate(() => { window.API.stopSpawning(); window.API.setPlayerValue(150); });
             await page.waitForTimeout(600);
             let bossUSpawn3 = await page.evaluate(() => window.API.getBossState());
             assert(bossUSpawn3 !== 'NONE', `Boss should spawn at 150 in Level 2`);
@@ -841,7 +841,7 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
                 const tPage = await tabletContext.newPage();
                 tPage.on("console", msg => console.log("TABLET:", msg.text()));
                 await tPage.goto(baseURL + "?debug=1", { waitUntil: 'networkidle' });
-                await tPage.waitForTimeout(6000);
+                await tPage.waitForFunction(() => window.__PHASER_GAME__ !== undefined, { timeout: 15000 });
                 await tPage.evaluate(() => { window.__PHASER_GAME__.scene.scenes[0].scene.start('GameScene'); });
                 await tPage.waitForTimeout(3000);
 
@@ -941,7 +941,7 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
                 });
                 const dPage = await desktopContext.newPage();
                 await dPage.goto(baseURL + "?debug=1", { waitUntil: 'networkidle' });
-                await dPage.waitForTimeout(6000);
+                await dPage.waitForFunction(() => window.__PHASER_GAME__ !== undefined, { timeout: 15000 });
                 await dPage.evaluate(() => { window.__PHASER_GAME__.scene.scenes[0].scene.start('GameScene'); });
                 await dPage.waitForTimeout(3000);
 
@@ -987,8 +987,8 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
             });
             const rotPage = await rotContext.newPage();
             await rotPage.goto(baseURL + "?debug=1", { waitUntil: 'networkidle' });
-            await rotPage.waitForTimeout(6000);
-            await rotPage.evaluate(() => { window.__PHASER_GAME__.scene.scenes[0].scene.start('GameScene'); });
+            await rotPage.waitForFunction(() => window.__PHASER_GAME__ !== undefined, { timeout: 15000 });
+                await rotPage.evaluate(() => { window.__PHASER_GAME__.scene.scenes[0].scene.start('GameScene'); });
             await rotPage.waitForTimeout(3000);
             
             // rotate to landscape

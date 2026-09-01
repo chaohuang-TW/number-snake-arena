@@ -1195,7 +1195,7 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
             await abPage.evaluate(() => { window.__PHASER_GAME__.scene.scenes[0].scene.start('GameScene'); });
             await abPage.waitForFunction(() => {
                 const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
-                return gs && gs.scene.isActive() && gs.player && gs.player.head;
+                return gs && gs.scene.isActive() && gs.player && gs.player.head && gs.player.head.body;
             }, { timeout: 15000 });
 
             // Right edge flee test
@@ -1204,6 +1204,7 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
                 gs.player.value = 50;
                 gs.player.isStunned = true; // Freeze player so it doesn't eat the enemy
                 gs.player.head.setPosition(950, 0); // player far enough to trigger flee but not eat assist (dist=200)
+                gs.player.head.setVelocity(0, 0); // explicitly ensure 0 velocity
                 for (let e of gs.enemies) { e.destroy(); }
                 gs.enemies = [];
                 gs.spawnEnemy();
@@ -1237,6 +1238,7 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
                 gs.player.value = 50;
                 gs.player.isStunned = true; // Freeze player
                 gs.player.head.setPosition(1100, 700); // player near bottom right
+                gs.player.head.setVelocity(0, 0);
                 for (let e of gs.enemies) { e.destroy(); }
                 gs.enemies = [];
                 gs.spawnEnemy();

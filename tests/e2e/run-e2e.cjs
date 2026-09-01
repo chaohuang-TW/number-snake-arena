@@ -340,8 +340,9 @@ const baseURL = process.env.BASE_URL || 'http://localhost:3000/';
                 console.log(`Testing viewport ${v.width}x${v.height}`);
                 await page.setViewportSize(v);
                 await page.evaluate(() => { API.restartGame(); });
-                await page.waitForTimeout(3000);
+                await page.waitForTimeout(1500);
                 await page.evaluate(() => { window.API = window.__NUMBER_SNAKE_DEBUG__; window.API.stopSpawning(); });
+                await page.waitForTimeout(500);
                 
                 // Boost E2E
                 let initialBoost = await page.evaluate(() => API.getBoostEnergy());
@@ -850,7 +851,9 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
                 await tPage.goto(baseURL + "?debug=1", { waitUntil: 'networkidle' });
                 await tPage.waitForFunction(() => window.__PHASER_GAME__ !== undefined, { timeout: 15000 });
                 await tPage.evaluate(() => { window.__PHASER_GAME__.scene.scenes[0].scene.start('GameScene'); });
-                await tPage.waitForTimeout(3000);
+                await tPage.waitForTimeout(1500);
+                await tPage.evaluate(() => { window.API = window.__NUMBER_SNAKE_DEBUG__; window.API.stopSpawning(); });
+                await tPage.waitForTimeout(500);
 
                 let boostVisible = await tPage.evaluate(() => {
                     const scene = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
@@ -950,7 +953,9 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
                 await dPage.goto(baseURL + "?debug=1", { waitUntil: 'networkidle' });
                 await dPage.waitForFunction(() => window.__PHASER_GAME__ !== undefined, { timeout: 15000 });
                 await dPage.evaluate(() => { window.__PHASER_GAME__.scene.scenes[0].scene.start('GameScene'); });
-                await dPage.waitForTimeout(3000);
+                await dPage.waitForTimeout(1500);
+                await dPage.evaluate(() => { window.API = window.__NUMBER_SNAKE_DEBUG__; window.API.stopSpawning(); });
+                await dPage.waitForTimeout(500);
 
                 let boostVisible = await dPage.evaluate(() => {
                     const scene = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
@@ -996,7 +1001,9 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
             await rotPage.goto(baseURL + "?debug=1", { waitUntil: 'networkidle' });
             await rotPage.waitForFunction(() => window.__PHASER_GAME__ !== undefined, { timeout: 15000 });
                 await rotPage.evaluate(() => { window.__PHASER_GAME__.scene.scenes[0].scene.start('GameScene'); });
-            await rotPage.waitForTimeout(3000);
+            await rotPage.waitForTimeout(1500);
+            await rotPage.evaluate(() => { window.API = window.__NUMBER_SNAKE_DEBUG__; window.API.stopSpawning(); });
+            await rotPage.waitForTimeout(500);
             
             // rotate to landscape
             await rotPage.setViewportSize({ width: 1194, height: 834 });

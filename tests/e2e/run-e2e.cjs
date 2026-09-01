@@ -1203,7 +1203,7 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
                 const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
                 gs.player.value = 50;
                 gs.player.isStunned = true; // Freeze player so it doesn't eat the enemy
-                gs.player.head.setPosition(950, 0); // player far enough to trigger flee but not eat assist (dist=200)
+                gs.player.head.setPosition(1030, 0); // player far enough to trigger flee but not eat assist (dist=120)
                 gs.player.head.setVelocity(0, 0); // explicitly ensure 0 velocity
                 for (let e of gs.enemies) { e.destroy(); }
                 gs.enemies = [];
@@ -1212,25 +1212,59 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
                 enemy.body.setPosition(1150, 0);
                 enemy.value = 10;
                 
+                let pVx = gs.player.head.body.velocity.x;
+                let pVy = gs.player.head.body.velocity.y;
+                
                 const startX = enemy.body.x;
-                await new Promise(r => setTimeout(r, 2000));
+                const startVx = enemy.body.body ? enemy.body.body.velocity.x : 0;
+                
+                await new Promise(r => setTimeout(r, 100)); // allow state to update
+                const initialState = enemy.state;
+                const wasActive = enemy.body.active;
+                
+                await new Promise(r => setTimeout(r, 1900)); // observe escape
                 
                 let res = { 
                     escaped: enemy.body.x < 1150, 
+                    isActive: enemy.body.active,
+                    initialState,
                     startX,
+                    startVx,
                     finalX: enemy.body.x, 
+                    finalVx: enemy.body.body ? enemy.body.body.velocity.x : 0,
+                    pVx,
+                    pVy,
                     steerX: gs.getBoundarySteering ? gs.getBoundarySteering(enemy.body.x, 0, 1200, 800, 160).x : "unknown"
                 }; 
                 gs.player.isStunned = false;
                 return res;
             });
 
+            if (escapeRight.pVx !== 0 || escapeRight.pVy !== 0) {
+                console.error(`❌ ASSERT FAILED: Player velocity not zero! (${escapeRight.pVx}, ${escapeRight.pVy})`);
+                totalErrors++;
+            } else {
+                console.log(`✅ ASSERT OK: Player remained stationary`);
+            }
+            if (escapeRight.initialState !== 1) { // 1 = FLEE
+                console.error(`❌ ASSERT FAILED: Enemy explicit state is not FLEE. Got: ${escapeRight.initialState}`);
+                totalErrors++;
+            } else {
+                console.log(`✅ ASSERT OK: Enemy explicit state is FLEE`);
+            }
+            if (!escapeRight.isActive) {
+                console.error(`❌ ASSERT FAILED: Enemy was eaten or destroyed!`);
+                totalErrors++;
+            } else {
+                console.log(`✅ ASSERT OK: Enemy remained active`);
+            }
             if (!escapeRight.escaped) {
                 console.error(`❌ ASSERT FAILED: Enemy did not escape right boundary (startX: ${escapeRight.startX}, finalX: ${escapeRight.finalX})`);
                 totalErrors++;
             } else {
                 console.log(`✅ ASSERT OK: Enemy naturally steered inward away from right boundary (final x = ${escapeRight.finalX})`);
             }
+            console.log(`   Log: initialState=${escapeRight.initialState}, startX=${escapeRight.startX}, startVx=${escapeRight.startVx}, finalX=${escapeRight.finalX}, finalVx=${escapeRight.finalVx}`);
 
             // Corner escape test
             let escapeCorner = await abPage.evaluate(async () => {
@@ -1246,14 +1280,26 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
                 enemy.body.setPosition(1150, 750);
                 enemy.value = 10;
                 
-                await new Promise(r => setTimeout(r, 2500));
+                await new Promise(r => setTimeout(r, 100)); // allow state to update
+                const initialState = enemy.state;
                 
-                let res = enemy.body.x < 1150 && enemy.body.y < 750;
+                await new Promise(r => setTimeout(r, 2400));
+                
+                let res = {
+                    escaped: enemy.body.x < 1150 && enemy.body.y < 750,
+                    initialState
+                };
                 gs.player.isStunned = false;
                 return res;
             });
             
-            if (!escapeCorner) {
+            if (escapeCorner.initialState !== 1) { // 1 = FLEE
+                console.error(`❌ ASSERT FAILED: Corner Enemy explicit state is not FLEE. Got: ${escapeCorner.initialState}`);
+                totalErrors++;
+            } else {
+                console.log(`✅ ASSERT OK: Corner Enemy explicit state is FLEE`);
+            }
+            if (!escapeCorner.escaped) {
                 console.error(`❌ ASSERT FAILED: Enemy remained trapped in bottom-right corner`);
                 totalErrors++;
             } else {

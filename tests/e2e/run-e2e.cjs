@@ -656,8 +656,12 @@ const baseURL = process.env.BASE_URL || 'http://localhost:3000/';
                 const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
                 gs.scene.start('GameScene', { levelId: 2 });
             });
-            await page.waitForTimeout(1500);
+            await page.waitForFunction(() => {
+                const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+                return gs && gs.player && gs.player.head;
+            });
             await page.evaluate(() => { window.API = window.__NUMBER_SNAKE_DEBUG__; window.API.stopSpawning(); });
+            await page.waitForTimeout(500);
             
             let clT = await page.evaluate(() => window.API.getCurrentLevel());
             assert(clT === 2, `Expected Level 2, got ${clT}`);
@@ -786,7 +790,10 @@ const baseURL = process.env.BASE_URL || 'http://localhost:3000/';
                 const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
                 gs.scene.start('GameScene', { levelId: 2 });
             });
-            await page.waitForTimeout(1500);
+            await page.waitForFunction(() => {
+                const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+                return gs && gs.player && gs.player.head && gs.levelDef && gs.levelDef.id === 2;
+            });
             await page.evaluate(() => { window.API = window.__NUMBER_SNAKE_DEBUG__; window.API.stopSpawning(); });
             
             let pValV = await page.evaluate(() => window.API.getPlayerValue());
@@ -800,7 +807,7 @@ const baseURL = process.env.BASE_URL || 'http://localhost:3000/';
             let comboV = await page.evaluate(() => window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene').comboCount);
             assert(comboV === 0, `Isolation: combo should be 0, got ${comboV}`);
             let enemyCountV = await page.evaluate(() => window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene').enemies.length);
-            assert(enemyCountV === 0, `Isolation: old enemies should be cleared`);
+            assert(enemyCountV === 0, `Isolation: old enemies should be cleared, got ${enemyCountV}`);
             let bossV = await page.evaluate(() => window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene').boss);
             assert(bossV === null, `Isolation: Boss should be absent`);
 console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
@@ -1037,6 +1044,246 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
             }
 
             await rotContext.close();
+
+    
+            // =========================================================
+            // Test Z: Enemy Population Cap
+            // =========================================================
+            console.log("\n--- Test Z: Enemy Population Cap ---");
+            const zContext = await browser.newContext();
+            const zPage = await zContext.newPage();
+            await zPage.goto(baseURL + "?debug=1", { waitUntil: 'networkidle' });
+            await zPage.waitForFunction(() => window.__PHASER_GAME__ !== undefined, { timeout: 15000 });
+            await zPage.evaluate(() => { window.__PHASER_GAME__.scene.scenes[0].scene.start('GameScene'); });
+            await zPage.waitForTimeout(500);
+            await zPage.evaluate(() => { window.API = window.__NUMBER_SNAKE_DEBUG__; });
+
+            // Fast forward time by hacking the spawnTimer to trigger continuously
+            await zPage.evaluate(async () => {
+                const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+                for (let i = 0; i < 100; i++) {
+                    gs.spawnTimer = 0;
+                    gs.update(0, 16);
+                }
+            });
+            await zPage.waitForTimeout(500);
+
+            let l1Pop = await zPage.evaluate(() => {
+                const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+                return gs.enemies.length;
+            });
+            let l1MaxValue = await zPage.evaluate(() => {
+                const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+                return Math.max(...gs.enemies.map(e => e.value));
+            });
+
+            if (l1Pop > 38 + 2) { 
+                console.error(`❌ ASSERT FAILED: Level 1 Population exceeded limit: ${l1Pop}`);
+                totalErrors++;
+            } else {
+                console.log(`✅ ASSERT OK: Level 1 Population is within limits (${l1Pop} <= 40)`);
+            }
+            if (l1MaxValue > 99) {
+                console.error(`❌ ASSERT FAILED: Level 1 max value exceeded 99: ${l1MaxValue}`);
+                totalErrors++;
+            } else {
+                console.log(`✅ ASSERT OK: Level 1 max value is ${l1MaxValue} <= 99`);
+            }
+
+            // Start level 2
+            await zPage.evaluate(() => {
+                window.API.startLevel(2);
+            });
+            await zPage.waitForFunction(() => {
+                const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+                return gs && gs.player && gs.player.head;
+            });
+            await zPage.waitForTimeout(500);
+            await zPage.evaluate(() => { window.API = window.__NUMBER_SNAKE_DEBUG__; });
+            
+            await zPage.evaluate(async () => {
+                const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+                for (let i = 0; i < 100; i++) {
+                    gs.spawnTimer = 0;
+                    gs.update(0, 16);
+                }
+            });
+            await zPage.waitForTimeout(500);
+
+            let l2Pop = await zPage.evaluate(() => {
+                const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+                return gs.enemies.length;
+            });
+            let l2MaxValue = await zPage.evaluate(() => {
+                const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+                return Math.max(...gs.enemies.map(e => e.value));
+            });
+            
+            if (l2Pop > 40) {
+                console.error(`❌ ASSERT FAILED: Level 2 Population exceeded limit: ${l2Pop}`);
+                totalErrors++;
+            } else {
+                console.log(`✅ ASSERT OK: Level 2 Population is within limits (${l2Pop} <= 40)`);
+            }
+            if (l2MaxValue > 199) {
+                console.error(`❌ ASSERT FAILED: Level 2 max value exceeded 199: ${l2MaxValue}`);
+                totalErrors++;
+            } else {
+                console.log(`✅ ASSERT OK: Level 2 max value is ${l2MaxValue} <= 199`);
+            }
+            await zContext.close();
+
+            // =========================================================
+            // Test AA: Spawn Interior Safety
+            // =========================================================
+            console.log("\n--- Test AA: Spawn Interior Safety ---");
+            const aaContext = await browser.newContext();
+            const aaPage = await aaContext.newPage();
+            await aaPage.goto(baseURL + "?debug=1", { waitUntil: 'networkidle' });
+            await aaPage.waitForFunction(() => window.__PHASER_GAME__ !== undefined, { timeout: 15000 });
+            await aaPage.evaluate(() => { window.__PHASER_GAME__.scene.scenes[0].scene.start('GameScene'); });
+            await aaPage.waitForTimeout(1000);
+
+            const testPositions = [
+                {x: 0, y: 0, name: "Center"},
+                {x: -1100, y: 0, name: "Left edge"},
+                {x: 1100, y: 0, name: "Right edge"},
+                {x: 0, y: -700, name: "Top edge"},
+                {x: 0, y: 700, name: "Bottom edge"},
+                {x: -1100, y: -700, name: "Top-left"},
+                {x: 1100, y: 700, name: "Bottom-right"}
+            ];
+
+            for (let pos of testPositions) {
+                let outOfBounds = await aaPage.evaluate((p) => {
+                    const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+                    gs.player.head.x = p.x;
+                    gs.player.head.y = p.y;
+                    for (let e of gs.enemies) { e.destroy(); }
+                    gs.enemies = [];
+                    for (let i = 0; i < 20; i++) gs.spawnEnemy();
+                    return gs.enemies.some(e => 
+                        e.body.x < -1200 + 140 || e.body.x > 1200 - 140 ||
+                        e.body.y < -800 + 140 || e.body.y > 800 - 140
+                    );
+                }, pos);
+
+                if (outOfBounds) {
+                    console.error(`❌ ASSERT FAILED: Spawns generated in unsafe edge band when player at ${pos.name}`);
+                    totalErrors++;
+                } else {
+                    console.log(`✅ ASSERT OK: Safe spawns when player at ${pos.name}`);
+                }
+            }
+            await aaContext.close();
+
+            // =========================================================
+            // Test AB: Boundary Escape
+            // =========================================================
+            console.log("\n--- Test AB: Boundary Escape ---");
+            const abContext = await browser.newContext();
+            const abPage = await abContext.newPage();
+            await abPage.goto(baseURL + "?debug=1", { waitUntil: 'networkidle' });
+            await abPage.waitForFunction(() => window.__PHASER_GAME__ !== undefined, { timeout: 15000 });
+            await abPage.evaluate(() => { window.__PHASER_GAME__.scene.scenes[0].scene.start('GameScene'); });
+            await abPage.waitForFunction(() => {
+                const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+                return gs && gs.scene.isActive() && gs.player && gs.player.head;
+            }, { timeout: 15000 });
+
+            // Right edge flee test
+            let escapeRight = await abPage.evaluate(async () => {
+                const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+                gs.player.value = 50;
+                gs.player.isStunned = true; // Freeze player so it doesn't eat the enemy
+                gs.player.head.setPosition(950, 0); // player far enough to trigger flee but not eat assist (dist=200)
+                for (let e of gs.enemies) { e.destroy(); }
+                gs.enemies = [];
+                gs.spawnEnemy();
+                let enemy = gs.enemies[0];
+                enemy.body.setPosition(1150, 0);
+                enemy.value = 10;
+                
+                const startX = enemy.body.x;
+                await new Promise(r => setTimeout(r, 2000));
+                
+                let res = { 
+                    escaped: enemy.body.x < 1150, 
+                    startX,
+                    finalX: enemy.body.x, 
+                    steerX: gs.getBoundarySteering ? gs.getBoundarySteering(enemy.body.x, 0, 1200, 800, 160).x : "unknown"
+                }; 
+                gs.player.isStunned = false;
+                return res;
+            });
+
+            if (!escapeRight.escaped) {
+                console.error(`❌ ASSERT FAILED: Enemy did not escape right boundary (startX: ${escapeRight.startX}, finalX: ${escapeRight.finalX})`);
+                totalErrors++;
+            } else {
+                console.log(`✅ ASSERT OK: Enemy naturally steered inward away from right boundary (final x = ${escapeRight.finalX})`);
+            }
+
+            // Corner escape test
+            let escapeCorner = await abPage.evaluate(async () => {
+                const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+                gs.player.value = 50;
+                gs.player.isStunned = true; // Freeze player
+                gs.player.head.setPosition(1100, 700); // player near bottom right
+                for (let e of gs.enemies) { e.destroy(); }
+                gs.enemies = [];
+                gs.spawnEnemy();
+                let enemy = gs.enemies[0];
+                enemy.body.setPosition(1150, 750);
+                enemy.value = 10;
+                
+                await new Promise(r => setTimeout(r, 2500));
+                
+                let res = enemy.body.x < 1150 && enemy.body.y < 750;
+                gs.player.isStunned = false;
+                return res;
+            });
+            
+            if (!escapeCorner) {
+                console.error(`❌ ASSERT FAILED: Enemy remained trapped in bottom-right corner`);
+                totalErrors++;
+            } else {
+                console.log(`✅ ASSERT OK: Enemy successfully escaped bottom-right corner`);
+            }
+            await abContext.close();
+
+            // =========================================================
+            // Test AC: Long-run Edge Distribution
+            // =========================================================
+            console.log("\n--- Test AC: Long-run Edge Distribution ---");
+            const acContext = await browser.newContext();
+            const acPage = await acContext.newPage();
+            await acPage.goto(baseURL + "?debug=1", { waitUntil: 'networkidle' });
+            await acPage.waitForFunction(() => window.__PHASER_GAME__ !== undefined, { timeout: 15000 });
+            await acPage.evaluate(() => { window.__PHASER_GAME__.scene.scenes[0].scene.start('GameScene'); });
+            await acPage.waitForTimeout(500);
+
+            let pileUp = await acPage.evaluate(async () => {
+                const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+                await new Promise(r => setTimeout(r, 5000));
+                
+                let edgeCount = 0;
+                for (let e of gs.enemies) {
+                    if (e.body.x < -1200 + 160 || e.body.x > 1200 - 160 ||
+                        e.body.y < -800 + 160 || e.body.y > 800 - 160) {
+                        edgeCount++;
+                    }
+                }
+                return edgeCount / gs.enemies.length;
+            });
+
+            if (pileUp > 0.5) {
+                console.error(`❌ ASSERT FAILED: Excessive edge accumulation (${(pileUp*100).toFixed(1)}% in edge band)`);
+                totalErrors++;
+            } else {
+                console.log(`✅ ASSERT OK: Edge distribution healthy (${(pileUp*100).toFixed(1)}% in edge band)`);
+            }
+            await acContext.close();
 
     console.log(`\n=== FINAL SCRIPT RESULTS ===`);
     console.log(`Total Errors/Failed Asserts: ${totalErrors}`);

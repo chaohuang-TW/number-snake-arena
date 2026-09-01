@@ -1,4 +1,4 @@
-# Number Snake Arena v0.2.2
+# Number Snake Arena v0.2.3
 
 No gameplay change. Release reproducibility / E2E deterministic closeout.
 

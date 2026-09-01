@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { GameBalance } from '../config/gameBalance';
-import { distance } from '../utils/math';
+import { distance, getBoundarySteering } from '../utils/math';
 
 export enum EnemyState {
     WANDER,
@@ -90,20 +90,48 @@ export class NumberEnemy {
                 break;
         }
 
-        const vx = Math.cos(targetAngle) * speed;
-        const vy = Math.sin(targetAngle) * speed;
-        this.body.setVelocity(vx, vy);
+        let vx = Math.cos(targetAngle) * speed;
+        let vy = Math.sin(targetAngle) * speed;
 
-        // Boundary bounce
+        // Soft boundary steering
         const hw = GameBalance.world.width / 2;
         const hh = GameBalance.world.height / 2;
-        if (this.body.x < -hw || this.body.x > hw) {
-            this.body.setVelocityX(-this.body.body!.velocity.x);
-            this.wanderAngle = Math.PI - this.wanderAngle;
+        const EDGE_SOFT_ZONE = 160;
+        const EDGE_HARD_MARGIN = 40;
+        
+        const steer = getBoundarySteering(this.body.x, this.body.y, hw, hh, EDGE_SOFT_ZONE, EDGE_HARD_MARGIN);
+        
+        if (steer.x !== 0 || steer.y !== 0) {
+            // Apply a steering force that strongly overrides natural movement
+            const steerForce = speed * 1.5; // Steer force is stronger than max speed
+            vx += steer.x * steerForce;
+            vy += steer.y * steerForce;
+            
+            // Renormalize to preserve speed magnitude
+            const newSpeed = Math.sqrt(vx * vx + vy * vy);
+            if (newSpeed > 0) {
+                vx = (vx / newSpeed) * speed;
+                vy = (vy / newSpeed) * speed;
+            }
         }
-        if (this.body.y < -hh || this.body.y > hh) {
-            this.body.setVelocityY(-this.body.body!.velocity.y);
-            this.wanderAngle = -this.wanderAngle;
+
+        this.body.setVelocity(vx, vy);
+
+        // Emergency hard clamp (should rarely be hit now)
+        if (this.body.x < -hw + EDGE_HARD_MARGIN) {
+            this.body.setX(-hw + EDGE_HARD_MARGIN);
+            if (this.body.body!.velocity.x < 0) this.body.setVelocityX(-this.body.body!.velocity.x);
+        } else if (this.body.x > hw - EDGE_HARD_MARGIN) {
+            this.body.setX(hw - EDGE_HARD_MARGIN);
+            if (this.body.body!.velocity.x > 0) this.body.setVelocityX(-this.body.body!.velocity.x);
+        }
+
+        if (this.body.y < -hh + EDGE_HARD_MARGIN) {
+            this.body.setY(-hh + EDGE_HARD_MARGIN);
+            if (this.body.body!.velocity.y < 0) this.body.setVelocityY(-this.body.body!.velocity.y);
+        } else if (this.body.y > hh - EDGE_HARD_MARGIN) {
+            this.body.setY(hh - EDGE_HARD_MARGIN);
+            if (this.body.body!.velocity.y > 0) this.body.setVelocityY(-this.body.body!.velocity.y);
         }
 
         // Sync text and glow

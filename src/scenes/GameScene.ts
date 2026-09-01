@@ -277,7 +277,7 @@ export class GameScene extends Phaser.Scene {
                     }
                 }
             });
-            if (edibleCount < 4 && this.enemies.length < this.levelDef.normalEnemyMax) {
+            if (edibleCount < 4 && this.enemies.length < GameBalance.enemy.normalMaxLimit + 2) {
                 this.spawnEnemy(true);
             }
         }
@@ -321,7 +321,7 @@ export class GameScene extends Phaser.Scene {
 
         // Spawning
         this.spawnTimer -= dt;
-        if (this.spawnTimer <= 0 && this.enemies.length < this.levelDef.normalEnemyMax) {
+        if (this.spawnTimer <= 0 && this.enemies.length < GameBalance.enemy.normalMaxLimit) {
             this.spawnEnemy();
             this.spawnTimer = 500;
         }
@@ -381,24 +381,58 @@ export class GameScene extends Phaser.Scene {
         let sx = 0, sy = 0;
         let validSpawn = false;
         let attempts = 0;
-        const hw = GameBalance.world.width / 2 - 50;
-        const hh = GameBalance.world.height / 2 - 50;
+        const SPAWN_EDGE_MARGIN = 140;
+        const hw = GameBalance.world.width / 2;
+        const hh = GameBalance.world.height / 2;
         
-        while (!validSpawn && attempts < 10) {
+        while (!validSpawn && attempts < 20) {
             let angle = Math.random() * Math.PI * 2;
-            if (isRescue) {
-                const vAngle = Math.atan2(this.player.head.body ? (this.player.head.body as Phaser.Physics.Arcade.Body).velocity.y : 0, this.player.head.body ? (this.player.head.body as Phaser.Physics.Arcade.Body).velocity.x : 0);
-                angle = vAngle + (Math.random() * 1.5 - 0.75);
-            }
             let dist = range.min + Math.random() * (range.max - range.min);
-            sx = Phaser.Math.Clamp(this.player.head.x + Math.cos(angle) * dist, -hw, hw);
-            sy = Phaser.Math.Clamp(this.player.head.y + Math.sin(angle) * dist, -hh, hh);
             
-            const actualDist = Phaser.Math.Distance.Between(this.player.head.x, this.player.head.y, sx, sy);
-            if (actualDist >= range.min - 10) {
-                validSpawn = true;
+            if (isRescue) {
+                // Bias towards available interior space while keeping distance
+                // Let's pick a few angles and take the one that gives the safest interior spot
+                const vAngle = Math.atan2(this.player.head.body ? (this.player.head.body as Phaser.Physics.Arcade.Body).velocity.y : 0, this.player.head.body ? (this.player.head.body as Phaser.Physics.Arcade.Body).velocity.x : 0);
+                
+                let bestAngle = angle;
+                let bestMargin = -9999;
+                
+                for (let i = 0; i < 3; i++) {
+                    const testAngle = vAngle + (Math.random() * 1.5 - 0.75);
+                    const tx = this.player.head.x + Math.cos(testAngle) * dist;
+                    const ty = this.player.head.y + Math.sin(testAngle) * dist;
+                    const margin = Math.min(hw - Math.abs(tx), hh - Math.abs(ty));
+                    if (margin > bestMargin) {
+                        bestMargin = margin;
+                        bestAngle = testAngle;
+                    }
+                }
+                angle = bestAngle;
+            }
+            
+            sx = this.player.head.x + Math.cos(angle) * dist;
+            sy = this.player.head.y + Math.sin(angle) * dist;
+            
+            // Check interior safe rectangle
+            if (sx >= -hw + SPAWN_EDGE_MARGIN && sx <= hw - SPAWN_EDGE_MARGIN &&
+                sy >= -hh + SPAWN_EDGE_MARGIN && sy <= hh - SPAWN_EDGE_MARGIN) {
+                
+                const actualDist = Phaser.Math.Distance.Between(this.player.head.x, this.player.head.y, sx, sy);
+                if (actualDist >= range.min - 10) {
+                    validSpawn = true;
+                }
             }
             attempts++;
+        }
+
+        if (!validSpawn) {
+            // Safe fallback towards the center of the world
+            const angleToCenter = Math.atan2(-this.player.head.y, -this.player.head.x);
+            sx = this.player.head.x + Math.cos(angleToCenter) * range.min;
+            sy = this.player.head.y + Math.sin(angleToCenter) * range.min;
+            // Hard clamp just in case world center is too close (should never happen if world is big enough)
+            sx = Phaser.Math.Clamp(sx, -hw + SPAWN_EDGE_MARGIN, hw - SPAWN_EDGE_MARGIN);
+            sy = Phaser.Math.Clamp(sy, -hh + SPAWN_EDGE_MARGIN, hh - SPAWN_EDGE_MARGIN);
         }
 
         const enemy = new NumberEnemy(this, sx, sy, val);
@@ -409,14 +443,33 @@ export class GameScene extends Phaser.Scene {
 
         this.bossSpawned = true;
         
-        let angle = Math.random() * Math.PI * 2;
-        let dist = 1000;
-        let sx = this.player.head.x + Math.cos(angle) * dist;
-        let sy = this.player.head.y + Math.sin(angle) * dist;
-        const hw = GameBalance.world.width / 2 - 100;
-        const hh = GameBalance.world.height / 2 - 100;
-        sx = Phaser.Math.Clamp(sx, -hw, hw);
-        sy = Phaser.Math.Clamp(sy, -hh, hh);
+        let sx = 0, sy = 0;
+        let validSpawn = false;
+        let attempts = 0;
+        const SPAWN_EDGE_MARGIN = 140;
+        const hw = GameBalance.world.width / 2;
+        const hh = GameBalance.world.height / 2;
+        const dist = 1000;
+        
+        while (!validSpawn && attempts < 20) {
+            let angle = Math.random() * Math.PI * 2;
+            sx = this.player.head.x + Math.cos(angle) * dist;
+            sy = this.player.head.y + Math.sin(angle) * dist;
+            
+            if (sx >= -hw + SPAWN_EDGE_MARGIN && sx <= hw - SPAWN_EDGE_MARGIN &&
+                sy >= -hh + SPAWN_EDGE_MARGIN && sy <= hh - SPAWN_EDGE_MARGIN) {
+                validSpawn = true;
+            }
+            attempts++;
+        }
+        
+        if (!validSpawn) {
+            const angleToCenter = Math.atan2(-this.player.head.y, -this.player.head.x);
+            sx = this.player.head.x + Math.cos(angleToCenter) * dist;
+            sy = this.player.head.y + Math.sin(angleToCenter) * dist;
+            sx = Phaser.Math.Clamp(sx, -hw + SPAWN_EDGE_MARGIN, hw - SPAWN_EDGE_MARGIN);
+            sy = Phaser.Math.Clamp(sy, -hh + SPAWN_EDGE_MARGIN, hh - SPAWN_EDGE_MARGIN);
+        }
 
         this.boss = new NumberBoss(this, sx, sy, this.levelDef.bossValue);
         this.audio.playBossAlert();

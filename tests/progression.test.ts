@@ -49,7 +49,8 @@ describe('ProgressionManager', () => {
         
         expect(ProgressionManager.claimReward('test-reward', 1)).toBe(true);
         expect(ProgressionManager.getMaxHP()).toBe(4);
-        
+    });
+
     it('should handle L2 and L3 rewards correctly (first time vs duplicate)', () => {
         ProgressionManager.load();
         expect(ProgressionManager.getMaxHP()).toBe(3);

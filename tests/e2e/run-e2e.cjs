@@ -1719,8 +1719,7 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
 
     // --- Test AM: RESPONSIVE LEVEL SELECT ---
     console.log('\n--- Test AM: RESPONSIVE LEVEL SELECT ---');
-    await adPage.evaluate(() => { window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene')?.scene?.stop(); window.__PHASER_GAME__.scene.start('MenuScene'); });
-    await adPage.waitForTimeout(500);
+    
 
     const testViewports = [
         { width: 390, height: 844 },
@@ -1737,6 +1736,9 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
         await adPage.setViewportSize(vp);
         await adPage.waitForTimeout(500);
         
+        await adPage.evaluate(() => { localStorage.removeItem('number_snake_progression'); });
+        await adPage.reload({ waitUntil: 'networkidle' });
+        await adPage.waitForFunction(() => window.__PHASER_GAME__ !== undefined, { timeout: 15000 });
         let amRes = await adPage.evaluate(() => {
             const menu = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'MenuScene');
             if (!menu || !menu.levelCards) return null;
@@ -1747,50 +1749,103 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
             let cardCount = menu.levelCards.length;
             let level5Exists = false;
             
-            for (let c of menu.levelCards) {
-                const matrix = c.getWorldTransformMatrix();
-                const cx = matrix.tx;
-                const cy = matrix.ty;
-                const scale = c.scale;
+            let tutBounds = null;
+            if (menu.tutorialText) {
+                tutBounds = menu.tutorialText.getBounds();
+            }
+            
+            let tutOk = true;
+            let startExists = false, startInteractive = false, startVisible = false, startInViewport = false, startInCard = false;
+            
+            let lockedVisible = [false, false, false, false];
+            let lockedInCard = [false, false, false, false];
+            let lockedInViewport = [false, false, false, false];
+            
+            for (let i = 0; i < menu.levelCards.length; i++) {
+                const c = menu.levelCards[i];
+                const cardBounds = c.getBounds();
+                const levelId = i + 1;
                 
-                const left = cx - 90 * scale;
-                const right = cx + 90 * scale;
-                const top = cy - 110 * scale;
-                const bottom = cy + 110 * scale;
-                
-                if (left < 0 || right > w || top < 0 || bottom > h) {
+                if (cardBounds.left < 0 || cardBounds.right > w || cardBounds.top < 0 || cardBounds.bottom > h) {
                     boundsOk = false;
+                }
+                
+                if (tutBounds) {
+                    if (!(tutBounds.left > cardBounds.right || tutBounds.right < cardBounds.left || tutBounds.top > cardBounds.bottom || tutBounds.bottom < cardBounds.top)) {
+                        tutOk = false;
+                    }
                 }
                 
                 if (c.list) {
                     for(let child of c.list) {
                         if (child.text && child.text.includes('LEVEL 5')) level5Exists = true;
+                        
+                        if (levelId === 1) {
+                            if (child.type === 'Text' && child.text === 'START') {
+                                startExists = true;
+                                if (child.alpha > 0 && child.visible) startVisible = true;
+                                
+                                const b = child.getBounds();
+                                if (b.left >= 0 && b.right <= w && b.top >= 0 && b.bottom <= h) startInViewport = true;
+                                if (cardBounds.left <= b.left + 1 && cardBounds.right >= b.right - 1 && cardBounds.top <= b.top + 1 && cardBounds.bottom >= b.bottom - 1) startInCard = true;
+                            }
+                            if (child.type === 'Rectangle' && child.input && child.input.enabled) startInteractive = true;
+                        }
+                        
+                        if (levelId > 1 && levelId <= 4) {
+                            if (child.type === 'Text' && child.text === '🔒 LOCKED') {
+                                if (child.alpha > 0 && child.visible) lockedVisible[levelId - 1] = true;
+                                const b = child.getBounds();
+                                if (b.left >= 0 && b.right <= w && b.top >= 0 && b.bottom <= h) lockedInViewport[levelId - 1] = true;
+                                if (cardBounds.left <= b.left + 1 && cardBounds.right >= b.right - 1 && cardBounds.top <= b.top + 1 && cardBounds.bottom >= b.bottom - 1) lockedInCard[levelId - 1] = true;
+                            }
+                        }
                     }
                 }
             }
-            
-            let tutOk = true;
-            if (menu.tutorialText) {
-                const ty = menu.tutorialText.y;
-                if (ty < h / 2) tutOk = false;
-            }
 
-            return { cardCount, boundsOk, tutOk, level5Exists };
+            return { 
+                cardCount, boundsOk, tutOk, level5Exists, 
+                startExists, startVisible, startInteractive, startInViewport, startInCard,
+                lockedVisible, lockedInViewport, lockedInCard
+            };
         });
 
-        if (!amRes) { console.error(`❌ ASSERT FAILED: MenuScene not active on ${vp.width}x${vp.height}`); totalErrors++; }
-        else {
-            if (amRes.cardCount !== 4) { console.error(`❌ ASSERT FAILED: Expected 4 cards, got ${amRes.cardCount} on ${vp.width}x${vp.height}`); totalErrors++; }
-            else console.log(`✅ ASSERT OK: Four cards exist on ${vp.width}x${vp.height}`);
-
-            if (!amRes.boundsOk) { console.error(`❌ ASSERT FAILED: Cards out of bounds on ${vp.width}x${vp.height}`); totalErrors++; }
-            else console.log(`✅ ASSERT OK: Cards in bounds on ${vp.width}x${vp.height}`);
-
-            if (!amRes.tutOk) { console.error(`❌ ASSERT FAILED: Tutorial overlap on ${vp.width}x${vp.height}`); totalErrors++; }
-            else console.log(`✅ ASSERT OK: Tutorial positioned correctly on ${vp.width}x${vp.height}`);
-
-            if (amRes.level5Exists) { console.error(`❌ ASSERT FAILED: Level 5 card exists on ${vp.width}x${vp.height}`); totalErrors++; }
-            else console.log(`✅ ASSERT OK: No Level 5 card on ${vp.width}x${vp.height}`);
+        if (!amRes) { 
+            console.error(`❌ ASSERT FAILED: MenuScene not active on ${vp.width}x${vp.height}`); 
+            totalErrors++; 
+        } else {
+            console.log(`Viewport: ${vp.width}x${vp.height}`);
+            
+            if (amRes.cardCount === 4) { console.log('Cards: PASS'); }
+            else { console.error(`Cards: FAIL (count ${amRes.cardCount})`); totalErrors++; }
+            
+            if (amRes.boundsOk) { console.log('Cards inside viewport: PASS'); }
+            else { console.error('Cards inside viewport: FAIL'); totalErrors++; }
+            
+            if (amRes.tutOk) { console.log('Tutorial real intersection: PASS'); }
+            else { console.error('Tutorial real intersection: FAIL'); totalErrors++; }
+            
+            if (amRes.startExists && amRes.startVisible && amRes.startInCard) { console.log('Level1 START exists: PASS'); }
+            else { console.error('Level1 START exists: FAIL'); totalErrors++; }
+            
+            if (amRes.startInteractive) { console.log('Level1 START interactive: PASS'); }
+            else { console.error('Level1 START interactive: FAIL'); totalErrors++; }
+            
+            if (amRes.startInViewport) { console.log('Level1 START in viewport: PASS'); }
+            else { console.error('Level1 START in viewport: FAIL'); totalErrors++; }
+            
+            for (let l = 2; l <= 4; l++) {
+                if (amRes.lockedVisible[l-1] && amRes.lockedInViewport[l-1] && amRes.lockedInCard[l-1]) {
+                    console.log(`Level${l} LOCKED visible: PASS`);
+                } else {
+                    console.error(`Level${l} LOCKED visible: FAIL`);
+                    totalErrors++;
+                }
+            }
+            
+            if (!amRes.level5Exists) { console.log('No Level5: PASS'); }
+            else { console.error('No Level5: FAIL'); totalErrors++; }
         }
     }
 

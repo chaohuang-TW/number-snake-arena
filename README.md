@@ -1,6 +1,6 @@
 # NUMBER SNAKE ARENA 🐍
 
-**Version:** `v0.3.1`
+**Version:** `v0.3.2`
 **Status:** Four playable levels, full progression system.
 
 A web-based arcade game where you control a snake of numbers, growing by eating smaller numbers while avoiding larger ones.
@@ -40,7 +40,10 @@ npm run test:e2e  # run E2E tests (requires running dev server on localhost:3000
 npm run build
 ```
 
-## v0.3.1
-Four-level release cleanup / UI/spec hardening.
+## Number Snake Arena v0.3.2
+
+Release integrity and responsive acceptance closeout.
+
 No intended gameplay balance changes.
 
+No Level 5.

@@ -614,6 +614,15 @@ export class GameScene extends Phaser.Scene {
         
         let currentY = cy - 40;
         
+        if (!this.levelDef.nextLevelId) {
+            this.add.text(cx, currentY, 'ALL LEVELS CLEARED!', { fontSize: '36px', fontStyle: 'bold', color: '#ffff00' }).setOrigin(0.5).setDepth(301);
+            this.add.text(cx, currentY + 60, 'YOU BECAME THE NUMBER MASTER!', { fontSize: '24px', fontStyle: 'bold', color: '#00ffff' }).setOrigin(0.5).setDepth(301);
+            this.time.delayedCall(500, () => {
+                this.createLevelClearButtons(cx, cy + 140);
+            });
+            return;
+        }
+
         if (newlyClaimedReward) {
             this.add.text(cx, currentY, '+1 HEART', { fontSize: '32px', fontStyle: 'bold', color: '#ff5555' }).setOrigin(0.5).setDepth(301);
             const oldMax = ProgressionManager.getMaxHP() - this.levelDef.reward!.value;

@@ -1,7 +1,7 @@
 # NUMBER SNAKE ARENA 🐍
 
-**Version:** `v0.2.4`
-**Status:** Acceptance-test and release-integrity closeout only (no gameplay changes).
+**Version:** `v0.3.0`
+**Status:** Four playable levels, full progression system.
 
 A web-based arcade game where you control a snake of numbers, growing by eating smaller numbers while avoiding larger ones.
 
@@ -16,10 +16,13 @@ A web-based arcade game where you control a snake of numbers, growing by eating 
 
 ## Levels
 
-* **Level Select**: Unlock levels as you play.
-* **Level 1**: Start at value 5, 3 Hearts. Grow to 70+ to summon Boss 100. Grow beyond 100 to eat the Boss!
-* **First Clear Reward**: Defeating Boss 100 for the first time grants +1 permanent Max Heart.
-* **Level 2**: Unlocks after Level 1. Start at value 5 with 4 Hearts. Grow to 150+ to summon Boss 200. Grow beyond 200 to eat the Boss!
+| Level | Start | HP | Boss | Trigger | Enemy Value Max | Reward |
+|---|---|---|---|---|---|---|
+| 1 | 5 | 3 | 100 | 70 | 99 | +1 Heart / Unlock L2 |
+| 2 | 5 | 4 | 200 | 150 | 199 | +1 Heart / Unlock L3 |
+| 3 | 5 | 5 | 300 | 230 | 299 | +1 Heart / Unlock L4 |
+| 4 | 5 | 6 | 400 | 310 | 399 | Final Clear |
+
 * **LocalStorage Progression**: Your progression and per-level best scores are automatically saved to your browser.
 
 ## Controls

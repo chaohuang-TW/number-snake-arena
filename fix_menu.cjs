@@ -1,53 +1,8 @@
-import Phaser from 'phaser';
-import { ProgressionManager } from '../models/Progression';
-import { LEVELS } from '../config/levels';
+const fs = require('fs');
 
-export class MenuScene extends Phaser.Scene {
-    private titleText!: Phaser.GameObjects.Text;
-    private levelCards: Phaser.GameObjects.Container[] = [];
-    private tutorialText!: Phaser.GameObjects.Text;
+let content = fs.readFileSync('src/scenes/MenuScene.ts', 'utf-8');
 
-    constructor() {
-        super('MenuScene');
-    }
-
-    create() {
-        ProgressionManager.load();
-        
-        const cx = this.scale.width / 2;
-        const cy = this.scale.height / 2;
-
-        this.titleText = this.add.text(cx, cy - 180, 'NUMBER SNAKE ARENA', {
-            fontSize: '42px',
-            fontStyle: 'bold',
-            color: '#00ffff'
-        }).setOrigin(0.5);
-
-        this.add.text(cx, cy - 120, 'LEVEL SELECT', {
-            fontSize: '24px',
-            color: '#ffffff'
-        }).setOrigin(0.5);
-
-        this.createLevelCards(cx, cy);
-
-        // Tutorial
-        const tutorialSeen = localStorage.getItem('tutorialSeen') === 'true';
-        if (!tutorialSeen) {
-            this.tutorialText = this.add.text(cx, cy + 200, '吃掉比你小的數字！\n躲開比你大的數字！', {
-                fontSize: '20px',
-                align: 'center',
-                color: '#ffff00'
-            }).setOrigin(0.5);
-            localStorage.setItem('tutorialSeen', 'true');
-        }
-
-        this.scale.on('resize', this.resize, this);
-        this.events.once('shutdown', () => {
-            this.scale.off('resize', this.resize, this);
-        });
-    }
-
-        createLevelCards(cx: number, cy: number) {
+const newCreateCards = `    createLevelCards(cx: number, cy: number) {
         // Clear previous if any
         this.levelCards.forEach(c => c.destroy());
         this.levelCards = [];
@@ -100,7 +55,7 @@ export class MenuScene extends Phaser.Scene {
             color: unlocked ? '#ffffff' : '#aaaaaa'
         }).setOrigin(0.5);
 
-        const bossText = this.add.text(0, -10, `BOSS ${levelDef.bossValue}`, {
+        const bossText = this.add.text(0, -10, \`BOSS \${levelDef.bossValue}\`, {
             fontSize: '20px',
             color: unlocked ? '#ff5555' : '#777777'
         }).setOrigin(0.5);
@@ -109,7 +64,7 @@ export class MenuScene extends Phaser.Scene {
 
         if (unlocked) {
             const bestScore = ProgressionManager.getBestScore(levelId);
-            const scoreText = this.add.text(0, 30, `BEST: ${bestScore}`, {
+            const scoreText = this.add.text(0, 30, \`BEST: \${bestScore}\`, {
                 fontSize: '16px',
                 color: '#aaaaaa'
             }).setOrigin(0.5);
@@ -131,21 +86,7 @@ export class MenuScene extends Phaser.Scene {
         }
 
         return container;
-    }
+    }`;
 
-    startGame(levelId: number) {
-        if ((this.sound as any).context && (this.sound as any).context.state === 'suspended') {
-            (this.sound as any).context.resume();
-        }
-        this.scene.start('GameScene', { levelId });
-    }
-
-    resize(gameSize: Phaser.Structs.Size) {
-        const cx = gameSize.width / 2;
-        const cy = gameSize.height / 2;
-        
-        if (this.titleText) this.titleText.setPosition(cx, cy - 180);
-        this.createLevelCards(cx, cy);
-        if (this.tutorialText) this.tutorialText.setPosition(cx, cy + 200);
-    }
-}
+content = content.replace(/createLevelCards\(cx: number, cy: number\) {[\s\S]*?startGame\(levelId: number\) {/, newCreateCards + '\n\n    startGame(levelId: number) {');
+fs.writeFileSync('src/scenes/MenuScene.ts', content);

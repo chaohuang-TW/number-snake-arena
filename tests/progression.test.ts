@@ -81,7 +81,8 @@ describe('ProgressionManager', () => {
         expect(ProgressionManager.getHighestUnlockedLevel()).toBe(4);
         
         // Cannot unlock 5 (no NextLevelId in L4 definition anyway, but test it)
-        expect(ProgressionManager.unlockLevel(5)).toBe(true); // well it technically lets you if called, but GameScene doesn't call it. Wait, the test asks "highestUnlockedLevel never needs to become 5"
+        expect(ProgressionManager.unlockLevel(5)).toBe(false);
+        expect(ProgressionManager.getHighestUnlockedLevel()).toBe(4);
     });
 
     it('existing v0.2.4-style save remains valid', () => {

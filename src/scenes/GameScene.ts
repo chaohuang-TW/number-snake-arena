@@ -626,14 +626,12 @@ export class GameScene extends Phaser.Scene {
         if (newlyClaimedReward) {
             this.add.text(cx, currentY, '+1 HEART', { fontSize: '32px', fontStyle: 'bold', color: '#ff5555' }).setOrigin(0.5).setDepth(301);
             const oldMax = ProgressionManager.getMaxHP() - this.levelDef.reward!.value;
-            let heartStr = '';
-            for(let i=0; i<oldMax; i++) heartStr += '❤️';
-            const heartText = this.add.text(cx, currentY + 40, heartStr, { fontSize: '32px' }).setOrigin(0.5).setDepth(301);
+            const newMax = ProgressionManager.getMaxHP();
+            const heartText = this.add.text(cx, currentY + 40, `${oldMax} HEARTS`, { fontSize: '32px' }).setOrigin(0.5).setDepth(301);
             
             // Animate reward
             this.time.delayedCall(800, () => {
-                heartStr += '❤️';
-                heartText.setText(heartStr);
+                heartText.setText(`${oldMax} → ${newMax} HEARTS`);
                 // quick scale bounce
                 this.tweens.add({
                     targets: heartText,
@@ -663,6 +661,25 @@ export class GameScene extends Phaser.Scene {
     }
 
     createLevelClearButtons(cx: number, cy: number) {
+        if (!this.levelDef.nextLevelId) {
+            const playAgainBtn = this.add.text(cx, cy - 30, 'PLAY AGAIN', {
+                fontSize: '32px', backgroundColor: '#555555', padding: { x: 20, y: 10 }
+            }).setOrigin(0.5).setDepth(301).setInteractive({ useHandCursor: true });
+            
+            playAgainBtn.on('pointerdown', () => {
+                this.scene.start('GameScene', { levelId: this.levelId });
+            });
+
+            const levelSelectBtn = this.add.text(cx, cy + 50, 'LEVEL SELECT', {
+                fontSize: '32px', backgroundColor: '#0055aa', padding: { x: 20, y: 10 }
+            }).setOrigin(0.5).setDepth(301).setInteractive({ useHandCursor: true });
+            
+            levelSelectBtn.on('pointerdown', () => {
+                this.scene.start('MenuScene');
+            });
+            return;
+        }
+
         if (this.levelDef.nextLevelId && ProgressionManager.getHighestUnlockedLevel() >= this.levelDef.nextLevelId) {
             const nextBtn = this.add.text(cx, cy - 60, 'NEXT LEVEL', {
                 fontSize: '32px', backgroundColor: '#00aa00', padding: { x: 20, y: 10 }

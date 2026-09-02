@@ -17,13 +17,13 @@ export class MenuScene extends Phaser.Scene {
         const cx = this.scale.width / 2;
         const cy = this.scale.height / 2;
 
-        this.titleText = this.add.text(cx, cy - 180, 'NUMBER SNAKE ARENA', {
+        this.titleText = this.add.text(cx, 60, 'NUMBER SNAKE ARENA', {
             fontSize: '42px',
             fontStyle: 'bold',
             color: '#00ffff'
         }).setOrigin(0.5);
 
-        this.add.text(cx, cy - 120, 'LEVEL SELECT', {
+        this.add.text(cx, 110, 'LEVEL SELECT', {
             fontSize: '24px',
             color: '#ffffff'
         }).setOrigin(0.5);
@@ -33,7 +33,7 @@ export class MenuScene extends Phaser.Scene {
         // Tutorial
         const tutorialSeen = localStorage.getItem('tutorialSeen') === 'true';
         if (!tutorialSeen) {
-            this.tutorialText = this.add.text(cx, cy + 200, '吃掉比你小的數字！\n躲開比你大的數字！', {
+            this.tutorialText = this.add.text(cx, this.scale.height - 40, '吃掉比你小的數字！\n躲開比你大的數字！', {
                 fontSize: '20px',
                 align: 'center',
                 color: '#ffff00'
@@ -48,15 +48,26 @@ export class MenuScene extends Phaser.Scene {
     }
 
         createLevelCards(cx: number, cy: number) {
-        // Clear previous if any
         this.levelCards.forEach(c => c.destroy());
         this.levelCards = [];
 
         const highestUnlocked = ProgressionManager.getHighestUnlockedLevel();
-        const screenWidth = this.scale.width;
+        const w = this.scale.width;
+        const h = this.scale.height;
         
-        let cols = screenWidth >= 800 ? 4 : 2;
-        let scale = screenWidth < 450 ? 0.8 : 1.0;
+        const isPortrait = h > w;
+        
+        let cols = isPortrait ? 2 : 4;
+        if (w < 400 && isPortrait) cols = 1; // Super narrow like iphone SE portrait
+        
+        const levelList = Object.values(LEVELS).sort((a, b) => a.id - b.id);
+        const rows = Math.ceil(levelList.length / cols);
+        
+        // Calculate max allowed sizes
+        const maxWidthPerCard = (w - (cols + 1) * 20) / cols;
+        const maxHeightPerCard = (h - 220) / rows; // leave room for title and tutorial
+        
+        let scale = Math.min(1.0, maxWidthPerCard / 180, maxHeightPerCard / 220);
         
         const cardWidth = 180 * scale;
         const cardHeight = 220 * scale;
@@ -64,22 +75,22 @@ export class MenuScene extends Phaser.Scene {
         const padY = 30 * scale;
         
         const totalW = cols * cardWidth + (cols - 1) * padX;
-        const startX = cx - totalW / 2 + cardWidth / 2;
+        const totalH = rows * cardHeight + (rows - 1) * padY;
         
-        // Ensure tutorial is placed out of the way
+        const startX = cx - totalW / 2 + cardWidth / 2;
+        const startY = Math.max(160, cy - totalH / 2 + cardHeight / 2 + 20); // Push down from title
+        
         if (this.tutorialText) {
-            this.tutorialText.setPosition(cx, cy + (cols === 2 ? 260 : 180));
+            this.tutorialText.setPosition(cx, h - 30);
         }
 
-        const levelIds = [1, 2, 3, 4];
-        
-        levelIds.forEach((levelId, idx) => {
-            if (!LEVELS[levelId]) return;
+        levelList.forEach((levelDef, idx) => {
+            const levelId = levelDef.id;
             const c = idx % cols;
             const r = Math.floor(idx / cols);
             
             const xPos = startX + c * (cardWidth + padX);
-            const yPos = cy + r * (cardHeight + padY) - (cols === 2 ? 80 : 0) * scale + 20;
+            const yPos = startY + r * (cardHeight + padY);
             
             const card = this.createCard(xPos, yPos, levelId, highestUnlocked >= levelId, scale);
             this.levelCards.push(card);
@@ -144,8 +155,8 @@ export class MenuScene extends Phaser.Scene {
         const cx = gameSize.width / 2;
         const cy = gameSize.height / 2;
         
-        if (this.titleText) this.titleText.setPosition(cx, cy - 180);
+        if (this.titleText) this.titleText.setPosition(cx, 60);
         this.createLevelCards(cx, cy);
-        if (this.tutorialText) this.tutorialText.setPosition(cx, cy + 200);
+        if (this.tutorialText) this.tutorialText.setPosition(cx, gameSize.height - 30);
     }
 }

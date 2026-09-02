@@ -1491,14 +1491,12 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
     await adPage.waitForTimeout(500);
     await adPage.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
-        
         gs.player.isStunned = true;
         gs.player.head.setVelocity(0, 0);
         gs.player.head.setPosition(0, 0);
         gs.enemies.forEach(e => e.destroy());
         gs.enemies = [];
         gs.player.value = 229;
-
     });
     await adPage.waitForTimeout(500);
     let ahBoss229 = await adPage.evaluate(() => {
@@ -1513,52 +1511,43 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
         gs.player.value = 230;
     });
     await adPage.waitForTimeout(500);
-    let ahBossState = await adPage.evaluate(() => {
+    let ahBoss230 = await adPage.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
-        return { isFleeing: gs.boss.isFleeing, pVal: gs.player.value };
+        return gs.boss !== null;
     });
-    if (!ahBossState) { console.error('❌ ASSERT FAILED: Boss300 did not spawn at 230'); totalErrors++; }
+    if (!ahBoss230) { console.error('❌ ASSERT FAILED: Boss300 did not spawn at 230'); totalErrors++; }
     else console.log('✅ ASSERT OK: Boss300 spawned at 230');
-
-    if (ahBossState && ahBossState.isFleeing) { console.error('❌ ASSERT FAILED: Boss300 fleeing at 230'); totalErrors++; }
-    else console.log('✅ ASSERT OK: Boss300 chasing at 230');
 
     await adPage.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
-        
         gs.player.isStunned = true;
         gs.player.head.setVelocity(0, 0);
         gs.player.head.setPosition(0, 0);
         gs.enemies.forEach(e => e.destroy());
         gs.enemies = [];
-        gs.player.value = 300;
-
+        gs.player.value = 299;
     });
     await adPage.waitForTimeout(500);
-    ahBossState = await adPage.evaluate(() => {
+    let ahBoss299 = await adPage.evaluate(() => window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene').boss.isFleeing);
+    if (ahBoss299) { console.error('❌ ASSERT FAILED: Boss300 fleeing at 299'); totalErrors++; }
+    else console.log('✅ ASSERT OK: Boss300 chasing at 299');
+
+    await adPage.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
-        return { isFleeing: gs.boss.isFleeing, pVal: gs.player.value };
+        gs.player.value = 300;
     });
-    if (ahBossState.isFleeing) { console.error('❌ ASSERT FAILED: Boss300 fleeing at 300'); totalErrors++; }
+    await adPage.waitForTimeout(500);
+    let ahBoss300 = await adPage.evaluate(() => window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene').boss.isFleeing);
+    if (ahBoss300) { console.error('❌ ASSERT FAILED: Boss300 fleeing at 300'); totalErrors++; }
     else console.log('✅ ASSERT OK: Boss300 chasing at 300');
 
     await adPage.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
-        
-        gs.player.isStunned = true;
-        gs.player.head.setVelocity(0, 0);
-        gs.player.head.setPosition(0, 0);
-        gs.enemies.forEach(e => e.destroy());
-        gs.enemies = [];
         gs.player.value = 301;
-
     });
     await adPage.waitForTimeout(500);
-    ahBossState = await adPage.evaluate(() => {
-        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
-        return { isFleeing: gs.boss.isFleeing, pVal: gs.player.value };
-    });
-    if (!ahBossState.isFleeing) { console.error('❌ ASSERT FAILED: Boss300 NOT fleeing at 301'); totalErrors++; }
+    let ahBoss301 = await adPage.evaluate(() => window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene').boss.isFleeing);
+    if (!ahBoss301) { console.error('❌ ASSERT FAILED: Boss300 chasing at 301'); totalErrors++; }
     else console.log('✅ ASSERT OK: Boss300 fleeing at 301');
 
     // --- Test AI: LEVEL 3 REWARD + LEVEL 4 UNLOCK ---
@@ -1616,38 +1605,61 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
 
     // --- Test AK: LEVEL 4 BOSS400 ---
     console.log('\n--- Test AK: LEVEL 4 BOSS400 ---');
+    await adPage.evaluate(() => { window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene').scene.start('GameScene', {levelId: 4}); });
+    await adPage.waitForTimeout(500);
     await adPage.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
-        
         gs.player.isStunned = true;
         gs.player.head.setVelocity(0, 0);
         gs.player.head.setPosition(0, 0);
         gs.enemies.forEach(e => e.destroy());
         gs.enemies = [];
         gs.player.value = 309;
-
     });
     await adPage.waitForTimeout(500);
     let akBoss309 = await adPage.evaluate(() => window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene').boss !== null);
     if (akBoss309) { console.error('❌ ASSERT FAILED: Boss400 spawned early'); totalErrors++; }
     else console.log('✅ ASSERT OK: Boss400 not spawned at 309');
 
-    await adPage.evaluate(() => { window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene').player.value = 310; });
+    await adPage.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        gs.player.value = 310;
+    });
     await adPage.waitForTimeout(500);
     let akBoss310 = await adPage.evaluate(() => window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene').boss !== null);
     if (!akBoss310) { console.error('❌ ASSERT FAILED: Boss400 did not spawn at 310'); totalErrors++; }
     else console.log('✅ ASSERT OK: Boss400 spawned at 310');
 
-    await adPage.evaluate(() => { window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene').player.value = 400; });
+    await adPage.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        gs.player.isStunned = true;
+        gs.player.head.setVelocity(0, 0);
+        gs.player.head.setPosition(0, 0);
+        gs.enemies.forEach(e => e.destroy());
+        gs.enemies = [];
+        gs.player.value = 399;
+    });
     await adPage.waitForTimeout(500);
-    let akFlee400 = await adPage.evaluate(() => window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene').boss.isFleeing);
-    if (akFlee400) { console.error('❌ ASSERT FAILED: Boss400 fleeing at 400'); totalErrors++; }
+    let akBoss399 = await adPage.evaluate(() => window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene').boss.isFleeing);
+    if (akBoss399) { console.error('❌ ASSERT FAILED: Boss400 fleeing at 399'); totalErrors++; }
+    else console.log('✅ ASSERT OK: Boss400 chasing at 399');
+
+    await adPage.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        gs.player.value = 400;
+    });
+    await adPage.waitForTimeout(500);
+    let akBoss400 = await adPage.evaluate(() => window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene').boss.isFleeing);
+    if (akBoss400) { console.error('❌ ASSERT FAILED: Boss400 fleeing at 400'); totalErrors++; }
     else console.log('✅ ASSERT OK: Boss400 chasing at 400');
 
-    await adPage.evaluate(() => { window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene').player.value = 401; });
+    await adPage.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        gs.player.value = 401;
+    });
     await adPage.waitForTimeout(500);
-    let akFlee401 = await adPage.evaluate(() => window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene').boss.isFleeing);
-    if (!akFlee401) { console.error('❌ ASSERT FAILED: Boss400 NOT fleeing at 401'); totalErrors++; }
+    let akBoss401 = await adPage.evaluate(() => window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene').boss.isFleeing);
+    if (!akBoss401) { console.error('❌ ASSERT FAILED: Boss400 chasing at 401'); totalErrors++; }
     else console.log('✅ ASSERT OK: Boss400 fleeing at 401');
 
     // --- Test AL: FINAL COMPLETION ---
@@ -1667,11 +1679,18 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
     } else {
         console.log('✅ ASSERT OK: Final clear UI displayed ALL LEVELS CLEARED');
     }
-    if (alUI.find(t => t.includes('+1 HEART')) || alUI.find(t => t.includes('NEXT LEVEL'))) {
-        console.error('❌ ASSERT FAILED: Final clear UI contains +1 HEART or NEXT LEVEL', alUI);
+    if (alUI.find(t => t.includes('+1 HEART')) || alUI.find(t => t.includes('NEXT LEVEL')) || alUI.find(t => t.includes('REPLAY LEVEL')) || alUI.find(t => t.includes('MENU'))) {
+        console.error('❌ ASSERT FAILED: Final clear UI contains forbidden elements (HEART/NEXT/REPLAY/MENU)', alUI);
         totalErrors++;
     } else {
-        console.log('✅ ASSERT OK: Final clear UI lacks NEXT LEVEL and HEART');
+        console.log('✅ ASSERT OK: Final clear UI lacks NEXT LEVEL, REPLAY, MENU, and HEART');
+    }
+    
+    if (!alUI.find(t => t === 'PLAY AGAIN') || !alUI.find(t => t === 'LEVEL SELECT')) {
+        console.error('❌ ASSERT FAILED: Final clear UI missing PLAY AGAIN or LEVEL SELECT', alUI);
+        totalErrors++;
+    } else {
+        console.log('✅ ASSERT OK: Final clear UI contains PLAY AGAIN and LEVEL SELECT');
     }
     
     let alProg = await adPage.evaluate(() => JSON.parse(localStorage.getItem('number_snake_progression')));
@@ -1683,6 +1702,83 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
     }
 
     await adContext.close();
+
+    // --- Test AM: RESPONSIVE LEVEL SELECT ---
+    console.log('\n--- Test AM: RESPONSIVE LEVEL SELECT ---');
+    await adPage.evaluate(() => { window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene')?.scene?.stop(); window.__PHASER_GAME__.scene.start('MenuScene'); });
+    await adPage.waitForTimeout(500);
+
+    const testViewports = [
+        { width: 390, height: 844 },
+        { width: 430, height: 932 },
+        { width: 768, height: 1024 },
+        { width: 834, height: 1194 },
+        { width: 1024, height: 1366 },
+        { width: 1366, height: 768 },
+        { width: 1920, height: 1080 }
+    ];
+
+    for (let vp of testViewports) {
+        console.log(`Testing Viewport ${vp.width}x${vp.height}`);
+        await adPage.setViewportSize(vp);
+        await adPage.waitForTimeout(500);
+        
+        let amRes = await adPage.evaluate(() => {
+            const menu = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'MenuScene');
+            if (!menu || !menu.levelCards) return null;
+            
+            const w = menu.scale.width;
+            const h = menu.scale.height;
+            let boundsOk = true;
+            let cardCount = menu.levelCards.length;
+            let level5Exists = false;
+            
+            for (let c of menu.levelCards) {
+                const matrix = c.getWorldTransformMatrix();
+                const cx = matrix.tx;
+                const cy = matrix.ty;
+                const scale = c.scale;
+                
+                const left = cx - 90 * scale;
+                const right = cx + 90 * scale;
+                const top = cy - 110 * scale;
+                const bottom = cy + 110 * scale;
+                
+                if (left < 0 || right > w || top < 0 || bottom > h) {
+                    boundsOk = false;
+                }
+                
+                if (c.list) {
+                    for(let child of c.list) {
+                        if (child.text && child.text.includes('LEVEL 5')) level5Exists = true;
+                    }
+                }
+            }
+            
+            let tutOk = true;
+            if (menu.tutorialText) {
+                const ty = menu.tutorialText.y;
+                if (ty < h / 2) tutOk = false;
+            }
+
+            return { cardCount, boundsOk, tutOk, level5Exists };
+        });
+
+        if (!amRes) { console.error(`❌ ASSERT FAILED: MenuScene not active on ${vp.width}x${vp.height}`); totalErrors++; }
+        else {
+            if (amRes.cardCount !== 4) { console.error(`❌ ASSERT FAILED: Expected 4 cards, got ${amRes.cardCount} on ${vp.width}x${vp.height}`); totalErrors++; }
+            else console.log(`✅ ASSERT OK: Four cards exist on ${vp.width}x${vp.height}`);
+
+            if (!amRes.boundsOk) { console.error(`❌ ASSERT FAILED: Cards out of bounds on ${vp.width}x${vp.height}`); totalErrors++; }
+            else console.log(`✅ ASSERT OK: Cards in bounds on ${vp.width}x${vp.height}`);
+
+            if (!amRes.tutOk) { console.error(`❌ ASSERT FAILED: Tutorial overlap on ${vp.width}x${vp.height}`); totalErrors++; }
+            else console.log(`✅ ASSERT OK: Tutorial positioned correctly on ${vp.width}x${vp.height}`);
+
+            if (amRes.level5Exists) { console.error(`❌ ASSERT FAILED: Level 5 card exists on ${vp.width}x${vp.height}`); totalErrors++; }
+            else console.log(`✅ ASSERT OK: No Level 5 card on ${vp.width}x${vp.height}`);
+        }
+    }
 
     console.log(`\n=== FINAL SCRIPT RESULTS ===`);
     console.log(`Total Errors/Failed Asserts: ${totalErrors}`);

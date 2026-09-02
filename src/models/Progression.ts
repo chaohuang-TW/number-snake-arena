@@ -1,3 +1,4 @@
+import { LEVELS } from '../config/levels';
 export interface SaveData {
     version: number;
     highestUnlockedLevel: number;
@@ -71,7 +72,8 @@ export class ProgressionManager {
     }
 
     static getHighestUnlockedLevel(): number {
-        return ProgressionManager.data.highestUnlockedLevel;
+        const maxConfiguredLevel = Math.max(...Object.values(LEVELS).map(l => l.id));
+        return Math.min(ProgressionManager.data.highestUnlockedLevel, maxConfiguredLevel);
     }
 
     static getMaxHP(): number {
@@ -93,6 +95,11 @@ export class ProgressionManager {
     }
 
     static unlockLevel(levelId: number) {
+        const maxConfiguredLevel = Math.max(...Object.values(LEVELS).map(l => l.id));
+        if (levelId > maxConfiguredLevel) {
+            return false;
+        }
+
         if (levelId > ProgressionManager.data.highestUnlockedLevel) {
             ProgressionManager.data.highestUnlockedLevel = levelId;
             ProgressionManager.save();

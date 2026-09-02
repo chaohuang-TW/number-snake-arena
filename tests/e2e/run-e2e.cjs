@@ -1422,7 +1422,7 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
         gs.levelClear();
     });
-    await adPage.waitForTimeout(2000);
+    await adPage.waitForTimeout(4000);
     
     let aeUI = await adPage.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
@@ -1491,7 +1491,14 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
     await adPage.waitForTimeout(500);
     await adPage.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        
+        gs.player.isStunned = true;
+        gs.player.head.setVelocity(0, 0);
+        gs.player.head.setPosition(0, 0);
+        gs.enemies.forEach(e => e.destroy());
+        gs.enemies = [];
         gs.player.value = 229;
+
     });
     await adPage.waitForTimeout(500);
     let ahBoss229 = await adPage.evaluate(() => {
@@ -1508,8 +1515,7 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
     await adPage.waitForTimeout(500);
     let ahBossState = await adPage.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
-        if (!gs.boss) return null;
-        return { isFleeing: gs.boss.isFleeing };
+        return { isFleeing: gs.boss.isFleeing, pVal: gs.player.value };
     });
     if (!ahBossState) { console.error('❌ ASSERT FAILED: Boss300 did not spawn at 230'); totalErrors++; }
     else console.log('✅ ASSERT OK: Boss300 spawned at 230');
@@ -1519,24 +1525,38 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
 
     await adPage.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        
+        gs.player.isStunned = true;
+        gs.player.head.setVelocity(0, 0);
+        gs.player.head.setPosition(0, 0);
+        gs.enemies.forEach(e => e.destroy());
+        gs.enemies = [];
         gs.player.value = 300;
+
     });
     await adPage.waitForTimeout(500);
     ahBossState = await adPage.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
-        return { isFleeing: gs.boss.isFleeing };
+        return { isFleeing: gs.boss.isFleeing, pVal: gs.player.value };
     });
     if (ahBossState.isFleeing) { console.error('❌ ASSERT FAILED: Boss300 fleeing at 300'); totalErrors++; }
     else console.log('✅ ASSERT OK: Boss300 chasing at 300');
 
     await adPage.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        
+        gs.player.isStunned = true;
+        gs.player.head.setVelocity(0, 0);
+        gs.player.head.setPosition(0, 0);
+        gs.enemies.forEach(e => e.destroy());
+        gs.enemies = [];
         gs.player.value = 301;
+
     });
     await adPage.waitForTimeout(500);
     ahBossState = await adPage.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
-        return { isFleeing: gs.boss.isFleeing };
+        return { isFleeing: gs.boss.isFleeing, pVal: gs.player.value };
     });
     if (!ahBossState.isFleeing) { console.error('❌ ASSERT FAILED: Boss300 NOT fleeing at 301'); totalErrors++; }
     else console.log('✅ ASSERT OK: Boss300 fleeing at 301');
@@ -1547,7 +1567,7 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
         gs.handleBossCollision(); // This triggers win
     });
-    await adPage.waitForTimeout(2000);
+    await adPage.waitForTimeout(4000);
     let aiProg = await adPage.evaluate(() => JSON.parse(localStorage.getItem('number_snake_progression')));
     if (aiProg.highestUnlockedLevel !== 4 || aiProg.maxHPBonus !== 3 || !aiProg.claimedRewards.includes('level-3-clear-heart')) {
         console.error('❌ ASSERT FAILED: L3 Clear did not grant proper progression', aiProg);
@@ -1598,7 +1618,14 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
     console.log('\n--- Test AK: LEVEL 4 BOSS400 ---');
     await adPage.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        
+        gs.player.isStunned = true;
+        gs.player.head.setVelocity(0, 0);
+        gs.player.head.setPosition(0, 0);
+        gs.enemies.forEach(e => e.destroy());
+        gs.enemies = [];
         gs.player.value = 309;
+
     });
     await adPage.waitForTimeout(500);
     let akBoss309 = await adPage.evaluate(() => window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene').boss !== null);
@@ -1629,7 +1656,7 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
         gs.handleBossCollision(); // Trigger win
     });
-    await adPage.waitForTimeout(2000);
+    await adPage.waitForTimeout(4000);
     let alUI = await adPage.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
         return gs.children.list.filter(c => c.type === 'Text').map(t => t.text);

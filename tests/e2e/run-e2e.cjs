@@ -566,8 +566,17 @@ const baseURL = process.env.BASE_URL || 'http://localhost:3000/';
                 const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
                 gs.scene.start('GameScene', { levelId: 1 });
             });
-            await page.waitForTimeout(1500);
-            await page.evaluate(() => { window.API = window.__NUMBER_SNAKE_DEBUG__; window.API.stopSpawning(); });
+            await page.waitForFunction(() => window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene')?.player?.head);
+            await page.evaluate(() => { 
+                window.API = window.__NUMBER_SNAKE_DEBUG__; 
+                window.API.stopSpawning(); 
+                const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+                gs.enemies.forEach(e => e.destroy());
+                gs.enemies = [];
+                gs.player.isStunned = true;
+                gs.player.head.setVelocity(0, 0);
+                
+            });
             
             let qHp = await page.evaluate(() => window.API.getHP());
             assert(qHp === 4, `Expected starting HP 4/4, got ${qHp}`);
@@ -1606,7 +1615,14 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
     // --- Test AK: LEVEL 4 BOSS400 ---
     console.log('\n--- Test AK: LEVEL 4 BOSS400 ---');
     await adPage.evaluate(() => { window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene').scene.start('GameScene', {levelId: 4}); });
-    await adPage.waitForTimeout(500);
+    await adPage.waitForFunction(() => window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene')?.player?.head);
+    await adPage.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        gs.enemies.forEach(e => e.destroy());
+        gs.enemies = [];
+        gs.player.isStunned = true;
+        gs.player.head.setVelocity(0, 0);
+    });
     await adPage.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
         gs.player.isStunned = true;
@@ -1701,8 +1717,6 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
         console.log('✅ ASSERT OK: Progression capped at highestUnlockedLevel=4');
     }
 
-    await adContext.close();
-
     // --- Test AM: RESPONSIVE LEVEL SELECT ---
     console.log('\n--- Test AM: RESPONSIVE LEVEL SELECT ---');
     await adPage.evaluate(() => { window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene')?.scene?.stop(); window.__PHASER_GAME__.scene.start('MenuScene'); });
@@ -1779,6 +1793,8 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
             else console.log(`✅ ASSERT OK: No Level 5 card on ${vp.width}x${vp.height}`);
         }
     }
+
+    await adContext.close();
 
     console.log(`\n=== FINAL SCRIPT RESULTS ===`);
     console.log(`Total Errors/Failed Asserts: ${totalErrors}`);

@@ -69,5 +69,18 @@ export const GameBalance = {
     },
     combo: {
         window: 2500, // ms
+    },
+    magnet: {
+        radius: 260, // px
+        duration: 8000, // ms
+        cooldown: 20000, // ms
+        pullSpeed: 380, // px/s
+        orbPullSpeed: 480 // px/s
+    },
+    orb: {
+        scoreReward: 10,
+        boostReward: 2,
+        lifetime: 11000, // ms
+        maxActive: 80
     }
 };

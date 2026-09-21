@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { BootScene } from './scenes/BootScene';
 import { MenuScene } from './scenes/MenuScene';
+import { CustomizeScene } from './scenes/CustomizeScene';
 import { GameScene } from './scenes/GameScene';
 import { PauseScene } from './scenes/PauseScene';
 
@@ -20,7 +21,7 @@ const config: Phaser.Types.Core.GameConfig = {
             debug: false, // will be toggleable via URL ?debug=1
         }
     },
-    scene: [BootScene, MenuScene, GameScene, PauseScene],
+    scene: [BootScene, MenuScene, CustomizeScene, GameScene, PauseScene],
     input: {
         activePointers: 3, // For multi-touch (joystick + boost)
     }

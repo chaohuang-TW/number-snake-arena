@@ -1,7 +1,9 @@
 import Phaser from 'phaser';
 import { GameBalance } from '../config/gameBalance';
-import { calculateTurnRate } from '../utils/gameRules';
+import { calculateTurnRate, getTailScale } from '../utils/gameRules';
 import { lerpAngle } from '../utils/math';
+import { CosmeticsManager } from '../models/Cosmetics';
+import { HEAD_SKINS } from '../config/headSkins';
 
 interface HistoryPoint {
     x: number;
@@ -17,6 +19,7 @@ export class PlayerSnake {
     hp: number;
     segments: number;
     boostEnergy: number;
+    headSkinId: string;
 
     currentAngle: number = 0; // radians
     history: HistoryPoint[] = [];
@@ -27,24 +30,40 @@ export class PlayerSnake {
     
     public targetAngle: number = 0;
 
-    constructor(scene: Phaser.Scene, x: number, y: number, initialValue: number, initialHP: number) {
+    constructor(scene: Phaser.Scene, x: number, y: number, initialValue: number, initialHP: number, customSkinId?: string) {
         this.scene = scene;
         this.value = initialValue;
         this.hp = initialHP;
         this.segments = GameBalance.player.initialSegments;
         this.boostEnergy = GameBalance.player.maxBoostEnergy;
 
-        this.head = scene.physics.add.image(x, y, 'player_head');
+        const selectedSkin = customSkinId || CosmeticsManager.getSelectedHeadSkin();
+        const skinDef = HEAD_SKINS[selectedSkin] || HEAD_SKINS.classic;
+        this.headSkinId = skinDef.id;
+
+        const textureKey = scene.textures.exists(skinDef.playerTexture) ? skinDef.playerTexture : 'player_head';
+        this.head = scene.physics.add.image(x, y, textureKey);
         this.head.setCircle(20);
         this.head.setDepth(100);
 
         this.valueText = scene.add.text(x, y, this.value.toString(), {
             fontSize: '20px',
             fontStyle: 'bold',
-            color: '#ffffff'
+            color: '#ffffff',
+            stroke: '#000000',
+            strokeThickness: 3
         }).setOrigin(0.5).setDepth(101);
 
         this.updateBodySprites();
+    }
+
+    setHeadSkin(skinId: string) {
+        const skinDef = HEAD_SKINS[skinId];
+        if (skinDef) {
+            this.headSkinId = skinDef.id;
+            const textureKey = this.scene.textures.exists(skinDef.playerTexture) ? skinDef.playerTexture : 'player_head';
+            this.head.setTexture(textureKey);
+        }
     }
 
     setDesiredDirection(dx: number, dy: number) {
@@ -111,13 +130,23 @@ export class PlayerSnake {
             }
         }
 
-        // Update body positions
+        // Update body positions & rotation
         for (let i = 0; i < this.bodySprites.length; i++) {
             const historyIdx = Math.min(i * 2 + 2, this.history.length - 1);
             if (this.history[historyIdx]) {
                 const pt = this.history[historyIdx];
                 this.bodySprites[i].setPosition(pt.x, pt.y);
                 this.bodySprites[i].setVisible(true);
+
+                // For tail segment, orient with movement path
+                if (i === this.bodySprites.length - 1) {
+                    const prevIdx = Math.max(0, historyIdx - 2);
+                    const prevPt = this.history[prevIdx];
+                    if (prevPt) {
+                        const angle = Math.atan2(pt.y - prevPt.y, pt.x - prevPt.x);
+                        this.bodySprites[i].setRotation(angle);
+                    }
+                }
             } else {
                 this.bodySprites[i].setVisible(false);
             }
@@ -130,13 +159,28 @@ export class PlayerSnake {
 
     updateBodySprites() {
         while (this.bodySprites.length < this.segments) {
-            const spr = this.scene.add.image(this.head.x, this.head.y, 'player_body');
+            const isTail = this.bodySprites.length === this.segments - 1;
+            const texture = isTail && this.scene.textures.exists('player_tail') ? 'player_tail' : 'player_body';
+            const spr = this.scene.add.image(this.head.x, this.head.y, texture);
             spr.setDepth(99 - this.bodySprites.length);
             this.bodySprites.push(spr);
         }
         while (this.bodySprites.length > this.segments) {
             const spr = this.bodySprites.pop();
             spr?.destroy();
+        }
+
+        // Recompute textures & scales for tapered tail
+        const total = this.bodySprites.length;
+        for (let i = 0; i < total; i++) {
+            const spr = this.bodySprites[i];
+            const isTail = i === total - 1;
+            const targetTexture = isTail && this.scene.textures.exists('player_tail') ? 'player_tail' : 'player_body';
+            if (spr.texture.key !== targetTexture) {
+                spr.setTexture(targetTexture);
+            }
+            const scale = getTailScale(i, total);
+            spr.setScale(scale);
         }
     }
 

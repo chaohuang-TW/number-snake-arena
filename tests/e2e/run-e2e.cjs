@@ -860,7 +860,7 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
                 await tPage.goto(baseURL + "?debug=1", { waitUntil: 'networkidle' });
                 await tPage.waitForFunction(() => window.__PHASER_GAME__ !== undefined, { timeout: 15000 });
                 await tPage.evaluate(() => { window.__PHASER_GAME__.scene.scenes[0].scene.start('GameScene'); });
-                await tPage.waitForTimeout(1500);
+                await tPage.waitForFunction(() => typeof window.__NUMBER_SNAKE_DEBUG__ !== 'undefined', { timeout: 15000 });
                 await tPage.evaluate(() => { window.API = window.__NUMBER_SNAKE_DEBUG__; window.API.stopSpawning(); });
                 await tPage.waitForTimeout(500);
 
@@ -962,7 +962,7 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
                 await dPage.goto(baseURL + "?debug=1", { waitUntil: 'networkidle' });
                 await dPage.waitForFunction(() => window.__PHASER_GAME__ !== undefined, { timeout: 15000 });
                 await dPage.evaluate(() => { window.__PHASER_GAME__.scene.scenes[0].scene.start('GameScene'); });
-                await dPage.waitForTimeout(1500);
+                await dPage.waitForFunction(() => typeof window.__NUMBER_SNAKE_DEBUG__ !== 'undefined', { timeout: 15000 });
                 await dPage.evaluate(() => { window.API = window.__NUMBER_SNAKE_DEBUG__; window.API.stopSpawning(); });
                 await dPage.waitForTimeout(500);
 
@@ -1009,8 +1009,8 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
             const rotPage = await rotContext.newPage();
             await rotPage.goto(baseURL + "?debug=1", { waitUntil: 'networkidle' });
             await rotPage.waitForFunction(() => window.__PHASER_GAME__ !== undefined, { timeout: 15000 });
-                await rotPage.evaluate(() => { window.__PHASER_GAME__.scene.scenes[0].scene.start('GameScene'); });
-            await rotPage.waitForTimeout(1500);
+            await rotPage.evaluate(() => { window.__PHASER_GAME__.scene.scenes[0].scene.start('GameScene'); });
+            await rotPage.waitForFunction(() => typeof window.__NUMBER_SNAKE_DEBUG__ !== 'undefined', { timeout: 15000 });
             await rotPage.evaluate(() => { window.API = window.__NUMBER_SNAKE_DEBUG__; window.API.stopSpawning(); });
             await rotPage.waitForTimeout(500);
             
@@ -1850,6 +1850,435 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
     }
 
     await adContext.close();
+
+    // ==========================================
+    // v0.4.0 SNAKE EVOLUTION ACCEPTANCE TESTS (AN - AT)
+    // ==========================================
+    const anContext = await browser.newContext({ hasTouch: true });
+    const evoPage = await anContext.newPage();
+
+    // --- Test AN: PLAYER TAIL + HEAD STYLE ---
+    console.log('\n--- Test AN: PLAYER TAIL + HEAD STYLE ---');
+    await evoPage.goto(baseURL + '?debug=1', { waitUntil: 'networkidle' });
+    await evoPage.waitForFunction(() => window.__PHASER_GAME__ !== undefined, { timeout: 15000 });
+
+    await evoPage.evaluate(() => {
+        window.__PHASER_GAME__.scene.start('GameScene', { levelId: 1 });
+    });
+    await evoPage.waitForFunction(() => typeof window.__NUMBER_SNAKE_DEBUG__ !== 'undefined', { timeout: 15000 });
+    await evoPage.evaluate(() => {
+        window.API = window.__NUMBER_SNAKE_DEBUG__;
+    });
+    await evoPage.waitForTimeout(1000);
+
+    const tailCheck = await evoPage.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        if (!gs || !gs.player) return null;
+        const p = gs.player;
+        const headExists = !!p.head && p.head.active;
+        const bodyCount = p.bodySprites.length;
+        const lastSprite = p.bodySprites[bodyCount - 1];
+        const secondLast = p.bodySprites[bodyCount - 2];
+        const thirdLast = p.bodySprites[bodyCount - 3];
+        const tailExists = !!lastSprite && lastSprite.active;
+        const tailDecreasing = (lastSprite.scaleX < secondLast.scaleX) && (secondLast.scaleX < thirdLast.scaleX);
+        const lastScale = lastSprite.scaleX;
+        const initialSkin = p.headSkinId;
+        return { headExists, bodyCount, tailExists, tailDecreasing, lastScale, initialSkin };
+    });
+
+    assert(tailCheck && tailCheck.headExists, 'Player head exists');
+    assert(tailCheck && tailCheck.bodyCount >= 5, 'Player has at least 5 body segments');
+    assert(tailCheck && tailCheck.tailExists, 'Player tail exists');
+    assert(tailCheck && tailCheck.tailDecreasing, 'Tail scales progressively smaller');
+    assert(tailCheck && tailCheck.lastScale <= 0.55, `Last segment has tail scale ~0.50, got ${tailCheck ? tailCheck.lastScale : 'null'}`);
+
+    // Customize UI test
+    await evoPage.evaluate(() => {
+        window.__PHASER_GAME__.scene.start('CustomizeScene');
+    });
+    await evoPage.waitForTimeout(500);
+
+    const mechaSelected = await evoPage.evaluate(() => {
+        const cust = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'CustomizeScene');
+        if (!cust) return false;
+        for (let i = 0; i < 6; i++) {
+            if (cust.styleNameText && cust.styleNameText.text === 'MECHA') break;
+            cust.nextBtnBg.emit('pointerdown');
+        }
+        cust.equipBtnBg.emit('pointerdown');
+        return cust.styleNameText && cust.styleNameText.text === 'MECHA';
+    });
+    assert(mechaSelected, 'Selected MECHA in Customize UI');
+
+    await evoPage.evaluate(() => {
+        window.__PHASER_GAME__.scene.start('GameScene', { levelId: 1 });
+    });
+    await evoPage.waitForTimeout(1000);
+
+    const skinInGame = await evoPage.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return gs && gs.player ? gs.player.headSkinId : null;
+    });
+    assert(skinInGame === 'mecha', `Player uses MECHA head in game, got ${skinInGame}`);
+
+    await evoPage.reload({ waitUntil: 'networkidle' });
+    await evoPage.waitForFunction(() => window.__PHASER_GAME__ !== undefined, { timeout: 15000 });
+
+    const persistedSkin = await evoPage.evaluate(() => {
+        const raw = localStorage.getItem('number_snake_cosmetics_v1');
+        return raw ? JSON.parse(raw).selectedHeadSkin : null;
+    });
+    assert(persistedSkin === 'mecha', `MECHA skin persists in localStorage, got ${persistedSkin}`);
+
+    await evoPage.evaluate(() => {
+        window.__PHASER_GAME__.scene.start('CustomizeScene');
+    });
+    await evoPage.waitForTimeout(500);
+
+    await evoPage.evaluate(() => {
+        const cust = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'CustomizeScene');
+        for (let i = 0; i < 6; i++) {
+            if (cust.styleNameText && cust.styleNameText.text === 'CLASSIC') break;
+            cust.nextBtnBg.emit('pointerdown');
+        }
+        cust.equipBtnBg.emit('pointerdown');
+    });
+    await evoPage.waitForTimeout(300);
+
+    const revertedSkin = await evoPage.evaluate(() => {
+        const raw = localStorage.getItem('number_snake_cosmetics_v1');
+        return raw ? JSON.parse(raw).selectedHeadSkin : null;
+    });
+    assert(revertedSkin === 'classic', `CLASSIC skin persisted again, got ${revertedSkin}`);
+
+    // --- Test AO: AI HEAD VARIETY ---
+    console.log('\n--- Test AO: AI HEAD VARIETY ---');
+    await evoPage.evaluate(() => {
+        window.__PHASER_GAME__.scene.start('GameScene', { levelId: 1 });
+    });
+    await evoPage.waitForFunction(() => typeof window.__NUMBER_SNAKE_DEBUG__ !== 'undefined', { timeout: 15000 });
+    await evoPage.evaluate(() => {
+        window.API = window.__NUMBER_SNAKE_DEBUG__;
+        window.API.startLevel(1);
+    });
+    await evoPage.waitForTimeout(1000);
+
+    const enemyCheck = await evoPage.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        gs.stopSpawning();
+        for (const e of gs.enemies) e.destroy();
+        gs.enemies = [];
+
+        const spawnedSkins = [];
+        for (let i = 0; i < 10; i++) {
+            const e = gs.spawnEnemy();
+            if (e) spawnedSkins.push(e.headSkinId);
+        }
+
+        const uniqueSkins = Array.from(new Set(spawnedSkins));
+        const allHaveVisualBody = gs.enemies.every(e => e.bodySprites && e.bodySprites.length === 5);
+        const allHaveTaperedTail = gs.enemies.every(e => e.bodySprites[4] && e.bodySprites[4].scaleX <= 0.55);
+
+        const testEnemy = gs.enemies[0];
+        const initialSkinId = testEnemy.headSkinId;
+
+        // Threat 1: Edible
+        gs.player.value = 100;
+        testEnemy.value = 5;
+        testEnemy.update(16, gs.player.head.x, gs.player.head.y, gs.player.value);
+        const edibleThreatType = testEnemy.currentThreatType;
+        const edibleSkinId = testEnemy.headSkinId;
+
+        // Threat 3: High Threat
+        gs.player.value = 5;
+        testEnemy.value = 50;
+        testEnemy.update(16, gs.player.head.x, gs.player.head.y, gs.player.value);
+        const highThreatType = testEnemy.currentThreatType;
+        const highThreatSkinId = testEnemy.headSkinId;
+
+        return {
+            uniqueSkinCount: uniqueSkins.length,
+            allHaveVisualBody,
+            allHaveTaperedTail,
+            skinRemainsStable: (initialSkinId === edibleSkinId && edibleSkinId === highThreatSkinId),
+            edibleThreatType,
+            highThreatType
+        };
+    });
+
+    assert(enemyCheck.allHaveVisualBody, 'All AI snakes have head + visual body + tail');
+    assert(enemyCheck.allHaveTaperedTail, 'All AI snakes have tapered tail scale');
+    assert(enemyCheck.uniqueSkinCount >= 2, `At least 2 different head styles among sample, got ${enemyCheck.uniqueSkinCount}`);
+    assert(enemyCheck.skinRemainsStable, 'Head skin remains stable across threat state updates');
+    assert(enemyCheck.edibleThreatType === 1, 'Edible enemy communicates edible threat type 1 (green glow)');
+    assert(enemyCheck.highThreatType === 3, 'High threat enemy communicates threat type 3 (red glow)');
+
+    // --- Test AP: MAGNET STRICT ELIGIBILITY ---
+    console.log('\n--- Test AP: MAGNET STRICT ELIGIBILITY ---');
+    const magnetEligibility = await evoPage.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        gs.stopSpawning();
+        for (const e of gs.enemies) e.destroy();
+        gs.enemies = [];
+        if (gs.boss) { gs.boss.destroy(); gs.boss = null; gs.bossSpawned = false; }
+
+        gs.player.head.setPosition(0, 0);
+        gs.player.value = 10;
+        gs.player.head.setVelocity(0, 0);
+
+        // 1. Smaller enemy inside radius (200px) -> Value 5
+        const eSmallerInside = gs.spawnEnemy();
+        eSmallerInside.value = 5;
+        eSmallerInside.body.setPosition(200, 0);
+        eSmallerInside.body.setVelocity(0, 0);
+
+        // 2. Equal enemy inside radius (200px) -> Value 10
+        const eEqualInside = gs.spawnEnemy();
+        eEqualInside.value = 10;
+        eEqualInside.body.setPosition(0, 200);
+        eEqualInside.body.setVelocity(0, 0);
+
+        // 3. Larger enemy inside radius (200px) -> Value 15
+        const eLargerInside = gs.spawnEnemy();
+        eLargerInside.value = 15;
+        eLargerInside.body.setPosition(-200, 0);
+        eLargerInside.body.setVelocity(0, 0);
+
+        // 4. Smaller enemy outside radius (300px) -> Value 5
+        const eSmallerOutside = gs.spawnEnemy();
+        eSmallerOutside.value = 5;
+        eSmallerOutside.body.setPosition(300, 0);
+        eSmallerOutside.body.setVelocity(0, 0);
+
+        gs.activateMagnet();
+        gs.magnet.update(100, gs.player.head.x, gs.player.head.y, gs.player.value, gs.enemies, gs.orbs);
+
+        const smallerInsidePulled = eSmallerInside.body.body.velocity.x < -100;
+        const equalInsidePulled = eEqualInside.body.body.velocity.y < -100;
+        const largerInsidePulled = eLargerInside.body.body.velocity.x > 100;
+        const smallerOutsidePulled = eSmallerOutside.body.body.velocity.x < -100;
+
+        return {
+            smallerInsidePulled,
+            equalInsidePulled,
+            largerInsidePulled,
+            smallerOutsidePulled,
+            magnetState: gs.magnet.state
+        };
+    });
+
+    assert(magnetEligibility.magnetState === 'ACTIVE', 'Magnet is ACTIVE');
+    assert(magnetEligibility.smallerInsidePulled, 'Smaller enemy inside 200px pulled toward player');
+    assert(!magnetEligibility.equalInsidePulled, 'Equal enemy inside 200px is NOT magnet pulled');
+    assert(!magnetEligibility.largerInsidePulled, 'Larger enemy inside 200px is NOT magnet pulled');
+    assert(!magnetEligibility.smallerOutsidePulled, 'Smaller enemy outside 300px is NOT magnet pulled');
+
+    // --- Test AQ: MAGNET ACTIVE / COOLDOWN ---
+    console.log('\n--- Test AQ: MAGNET ACTIVE / COOLDOWN ---');
+    await evoPage.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        gs.hardReset();
+    });
+    await evoPage.waitForTimeout(500);
+
+    await evoPage.click('canvas');
+    await evoPage.waitForTimeout(100);
+    await evoPage.keyboard.press('m');
+    await evoPage.waitForTimeout(200);
+
+    const mActive = await evoPage.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        gs.hud.update(gs.player.hp, 3, gs.player.boostEnergy, 100, gs.magnet.getHUDText(), gs.magnet.state);
+        return {
+            state: gs.magnet.state,
+            remaining: gs.magnet.getRemainingSeconds(),
+            hudText: gs.hud.magnetText.text
+        };
+    });
+    assert(mActive.state === 'ACTIVE', `Magnet activated on M key press, state: ${mActive.state}`);
+    assert(mActive.hudText.includes('MAGNET') && mActive.hudText.includes('s'), `HUD shows active countdown, got ${mActive.hudText}`);
+
+    const durationBefore = mActive.remaining;
+    await evoPage.keyboard.press('m');
+    await evoPage.waitForTimeout(200);
+    const durationAfter = await evoPage.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return gs.magnet.getRemainingSeconds();
+    });
+    assert(durationAfter <= durationBefore, 'Repeated M press does NOT reset active duration');
+
+    const cooldownState = await evoPage.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        gs.magnet.update(8500, 0, 0, 10, [], []);
+        gs.hud.update(gs.player.hp, 3, gs.player.boostEnergy, 100, gs.magnet.getHUDText(), gs.magnet.state);
+        const state = gs.magnet.state;
+        const hudText = gs.hud.magnetText.text;
+
+        gs.activateMagnet();
+        const stateAfterM = gs.magnet.state;
+        return { state, hudText, stateAfterM };
+    });
+    assert(cooldownState.state === 'COOLDOWN', `Magnet transitioned to COOLDOWN, state: ${cooldownState.state}`);
+    assert(cooldownState.stateAfterM === 'COOLDOWN', 'M press during cooldown does not activate');
+
+    const readyState = await evoPage.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        gs.magnet.update(20500, 0, 0, 10, [], []);
+        gs.hud.update(gs.player.hp, 3, gs.player.boostEnergy, 100, gs.magnet.getHUDText(), gs.magnet.state);
+        return {
+            state: gs.magnet.state,
+            hudText: gs.hud.magnetText.text
+        };
+    });
+    assert(readyState.state === 'READY', `Magnet returned to READY after cooldown, state: ${readyState.state}`);
+    assert(readyState.hudText === '🧲 MAGNET READY', `HUD displays 🧲 MAGNET READY, got ${readyState.hudText}`);
+
+    // --- Test AR: MOBILE MAGNET ---
+    console.log('\n--- Test AR: MOBILE MAGNET ---');
+    for (const vp of [{ width: 390, height: 844 }, { width: 834, height: 1194 }]) {
+        console.log(`Testing mobile viewport ${vp.width}x${vp.height}`);
+        await evoPage.setViewportSize(vp);
+        await evoPage.waitForTimeout(500);
+
+        const mobileLayout = await evoPage.evaluate(() => {
+            const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+            if (!gs || !gs.hud) return null;
+            gs.resize(gs.scale.gameSize);
+
+            const mBtn = gs.hud.magnetButton;
+            const bBtn = gs.hud.boostButton;
+            const joy = gs.joystick;
+            const w = gs.scale.width;
+            const h = gs.scale.height;
+
+            const mBounds = mBtn.getBounds();
+            const bBounds = bBtn.getBounds();
+
+            const mVisible = mBtn.visible && mBtn.alpha > 0;
+            const bVisible = bBtn.visible && bBtn.alpha > 0;
+            const jVisible = !!(joy && joy.base && joy.base.visible);
+
+            const mInViewport = mBounds.left >= 0 && mBounds.right <= w && mBounds.top >= 0 && mBounds.bottom <= h;
+            const bInViewport = bBounds.left >= 0 && bBounds.right <= w && bBounds.top >= 0 && bBounds.bottom <= h;
+
+            const buttonsOverlap = !(mBounds.right < bBounds.left || mBounds.left > bBounds.right || mBounds.bottom < bBounds.top || mBounds.top > bBounds.bottom);
+            const rightSide = mBounds.centerX > w / 2 && bBounds.centerX > w / 2;
+
+            return { mVisible, bVisible, jVisible, mInViewport, bInViewport, buttonsOverlap, rightSide };
+        });
+
+        assert(mobileLayout.mVisible, `MAGNET button visible on ${vp.width}x${vp.height}`);
+        assert(mobileLayout.bVisible, `BOOST button visible on ${vp.width}x${vp.height}`);
+        assert(mobileLayout.jVisible, `Virtual Joystick visible on ${vp.width}x${vp.height}`);
+        assert(mobileLayout.mInViewport && mobileLayout.bInViewport, `Both buttons inside viewport on ${vp.width}x${vp.height}`);
+        assert(!mobileLayout.buttonsOverlap, `No overlap between MAGNET and BOOST on ${vp.width}x${vp.height}`);
+        assert(mobileLayout.rightSide, `Buttons situated on right side on ${vp.width}x${vp.height}`);
+    }
+
+    await evoPage.setViewportSize({ width: 390, height: 844 });
+    await evoPage.waitForTimeout(300);
+
+    const tapped = await evoPage.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        gs.magnet.reset();
+        gs.hud.magnetButton.emit('pointerdown');
+        gs.hud.update(gs.player.hp, 3, gs.player.boostEnergy, 100, gs.magnet.getHUDText(), gs.magnet.state);
+        return {
+            magnetState: gs.magnet.state,
+            hudText: gs.hud.magnetText.text
+        };
+    });
+    assert(tapped.magnetState === 'ACTIVE', 'Tapping mobile MAGNET button activates ability');
+    assert(tapped.hudText.includes('MAGNET'), 'HUD shows active countdown after tap');
+
+    // --- Test AS: HEAD EAT → BODY ORBS ---
+    console.log('\n--- Test AS: HEAD EAT → BODY ORBS ---');
+    const eatOrbResults = await evoPage.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        gs.hardReset();
+        gs.player.value = 10;
+        gs.player.hp = 3;
+        gs.player.boostEnergy = 50;
+
+        const edibleEnemy = gs.spawnEnemy();
+        edibleEnemy.value = 5;
+        edibleEnemy.body.setPosition(gs.player.head.x, gs.player.head.y);
+
+        gs.handleEnemyCollision(edibleEnemy, gs.enemies.indexOf(edibleEnemy), gs.time.now);
+
+        const playerValAfterEat = gs.player.value;
+        const orbCount = gs.orbs.length;
+
+        const scoreAfterEat = gs.hud.getScore();
+        const boostAfterEat = gs.player.boostEnergy;
+
+        for (let i = gs.orbs.length - 1; i >= 0; i--) {
+            const orb = gs.orbs[i];
+            orb.destroy();
+            gs.orbs.splice(i, 1);
+            gs.hud.addScore(10);
+            gs.player.boostEnergy = Math.min(100, gs.player.boostEnergy + 2);
+        }
+
+        const playerValAfterOrbs = gs.player.value;
+        const playerHpAfterOrbs = gs.player.hp;
+        const scoreAfterOrbs = gs.hud.getScore();
+        const boostAfterOrbs = gs.player.boostEnergy;
+
+        const equalEnemy = gs.spawnEnemy();
+        equalEnemy.value = 15;
+        gs.handleEnemyCollision(equalEnemy, gs.enemies.indexOf(equalEnemy), gs.time.now);
+        const orbsAfterEqual = gs.orbs.length;
+
+        gs.player.isInvulnerable = false;
+        const largerEnemy = gs.spawnEnemy();
+        largerEnemy.value = 25;
+        gs.handleEnemyCollision(largerEnemy, gs.enemies.indexOf(largerEnemy), gs.time.now);
+        const orbsAfterLarger = gs.orbs.length;
+
+        return {
+            playerValAfterEat,
+            orbCount,
+            playerValAfterOrbs,
+            playerHpAfterOrbs,
+            scoreIncreased: scoreAfterOrbs > scoreAfterEat,
+            boostIncreased: boostAfterOrbs > boostAfterEat,
+            orbsAfterEqual,
+            orbsAfterLarger
+        };
+    });
+
+    assert(eatOrbResults.playerValAfterEat === 15, `Player Value after eating 5 is 15, got ${eatOrbResults.playerValAfterEat}`);
+    assert(eatOrbResults.orbCount >= 1, `Body orbs created after eat, got ${eatOrbResults.orbCount}`);
+    assert(eatOrbResults.playerValAfterOrbs === 15, `Player Value remains 15 after collecting orbs, got ${eatOrbResults.playerValAfterOrbs}`);
+    assert(eatOrbResults.playerHpAfterOrbs === 3, `Player HP remains 3 after collecting orbs, got ${eatOrbResults.playerHpAfterOrbs}`);
+    assert(eatOrbResults.scoreIncreased, 'Score increases from collecting body orbs (+10 each)');
+    assert(eatOrbResults.boostIncreased, 'Boost increases from collecting body orbs (+2 each)');
+    assert(eatOrbResults.orbsAfterEqual === 0, 'No body orbs created from equal-value collision damage');
+    assert(eatOrbResults.orbsAfterLarger === 0, 'No body orbs created from larger-value collision damage');
+
+    // --- Test AT: BACKGROUND THEMES ---
+    console.log('\n--- Test AT: BACKGROUND THEMES ---');
+    const themesCheck = [];
+    for (const lvl of [1, 2, 3, 4]) {
+        await evoPage.evaluate((l) => {
+            window.__PHASER_GAME__.scene.start('GameScene', { levelId: l });
+        }, lvl);
+        await evoPage.waitForTimeout(300);
+        const t = await evoPage.evaluate(() => {
+            const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+            return gs ? gs.levelDef.theme : null;
+        });
+        themesCheck.push(t);
+    }
+
+    assert(themesCheck[0] === 'neon-grid', `Level 1 theme is neon-grid, got ${themesCheck[0]}`);
+    assert(themesCheck[1] === 'cyber-city', `Level 2 theme is cyber-city, got ${themesCheck[1]}`);
+    assert(themesCheck[2] === 'lava-core', `Level 3 theme is lava-core, got ${themesCheck[2]}`);
+    assert(themesCheck[3] === 'deep-space', `Level 4 theme is deep-space, got ${themesCheck[3]}`);
+
+    await anContext.close();
 
     console.log(`\n=== FINAL SCRIPT RESULTS ===`);
     console.log(`Total Errors/Failed Asserts: ${totalErrors}`);

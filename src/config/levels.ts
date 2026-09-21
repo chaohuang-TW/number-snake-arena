@@ -11,6 +11,7 @@ export interface LevelDefinition {
     bossValue: number;
     bossTriggerValue: number;
     normalEnemyMax: number;
+    theme: 'neon-grid' | 'cyber-city' | 'lava-core' | 'deep-space';
     reward?: LevelReward;
     nextLevelId?: number;
 }
@@ -23,6 +24,7 @@ export const LEVELS: Record<number, LevelDefinition> = {
         bossValue: 100,
         bossTriggerValue: 70,
         normalEnemyMax: 99,
+        theme: 'neon-grid',
         reward: {
             type: 'MAX_HP',
             value: 1,
@@ -37,6 +39,7 @@ export const LEVELS: Record<number, LevelDefinition> = {
         bossValue: 200,
         bossTriggerValue: 150,
         normalEnemyMax: 199,
+        theme: 'cyber-city',
         reward: {
             type: 'MAX_HP',
             value: 1,
@@ -51,6 +54,7 @@ export const LEVELS: Record<number, LevelDefinition> = {
         bossValue: 300,
         bossTriggerValue: 230,
         normalEnemyMax: 299,
+        theme: 'lava-core',
         reward: {
             type: 'MAX_HP',
             value: 1,
@@ -64,7 +68,8 @@ export const LEVELS: Record<number, LevelDefinition> = {
         startValue: 5,
         bossValue: 400,
         bossTriggerValue: 310,
-        normalEnemyMax: 399
+        normalEnemyMax: 399,
+        theme: 'deep-space'
     }
 };
 

@@ -4,8 +4,11 @@ import { LEVELS } from '../config/levels';
 
 export class MenuScene extends Phaser.Scene {
     private titleText!: Phaser.GameObjects.Text;
-    private levelCards: Phaser.GameObjects.Container[] = [];
-    private tutorialText!: Phaser.GameObjects.Text;
+    private levelSelectText!: Phaser.GameObjects.Text;
+    private customizeBtnBg!: Phaser.GameObjects.Rectangle;
+    private customizeBtnText!: Phaser.GameObjects.Text;
+    public levelCards: Phaser.GameObjects.Container[] = [];
+    public tutorialText!: Phaser.GameObjects.Text;
 
     constructor() {
         super('MenuScene');
@@ -17,16 +20,30 @@ export class MenuScene extends Phaser.Scene {
         const cx = this.scale.width / 2;
         const cy = this.scale.height / 2;
 
-        this.titleText = this.add.text(cx, 60, 'NUMBER SNAKE ARENA', {
-            fontSize: '42px',
+        this.titleText = this.add.text(cx, 45, 'NUMBER SNAKE ARENA', {
+            fontSize: '36px',
             fontStyle: 'bold',
             color: '#00ffff'
         }).setOrigin(0.5);
 
-        this.add.text(cx, 110, 'LEVEL SELECT', {
-            fontSize: '24px',
+        this.levelSelectText = this.add.text(cx, 88, 'LEVEL SELECT', {
+            fontSize: '22px',
             color: '#ffffff'
         }).setOrigin(0.5);
+
+        // Customize button
+        this.customizeBtnBg = this.add.rectangle(cx, 126, 160, 32, 0x0055aa, 0.9)
+            .setStrokeStyle(2, 0x00ffff)
+            .setInteractive({ useHandCursor: true });
+        this.customizeBtnText = this.add.text(cx, 126, '🎨 CUSTOMIZE', {
+            fontSize: '16px',
+            fontStyle: 'bold',
+            color: '#ffffff'
+        }).setOrigin(0.5);
+
+        this.customizeBtnBg.on('pointerdown', () => {
+            this.scene.start('CustomizeScene');
+        });
 
         this.createLevelCards(cx, cy);
 
@@ -47,7 +64,7 @@ export class MenuScene extends Phaser.Scene {
         });
     }
 
-        createLevelCards(cx: number, cy: number) {
+    createLevelCards(cx: number, cy: number) {
         this.levelCards.forEach(c => c.destroy());
         this.levelCards = [];
 
@@ -65,7 +82,7 @@ export class MenuScene extends Phaser.Scene {
         
         // Calculate max allowed sizes
         const maxWidthPerCard = (w - (cols + 1) * 20) / cols;
-        const maxHeightPerCard = (h - 220) / rows; // leave room for title and tutorial
+        const maxHeightPerCard = (h - 220) / rows; // leave room for title, customize, and tutorial
         
         let scale = Math.min(1.0, maxWidthPerCard / 180, maxHeightPerCard / 220);
         
@@ -78,7 +95,7 @@ export class MenuScene extends Phaser.Scene {
         const totalH = rows * cardHeight + (rows - 1) * padY;
         
         const startX = cx - totalW / 2 + cardWidth / 2;
-        const startY = Math.max(160, cy - totalH / 2 + cardHeight / 2 + 20); // Push down from title
+        const startY = Math.max(160, cy - totalH / 2 + cardHeight / 2 + 20); // Push down from header
         
         if (this.tutorialText) {
             this.tutorialText.setPosition(cx, h - 30);
@@ -155,7 +172,12 @@ export class MenuScene extends Phaser.Scene {
         const cx = gameSize.width / 2;
         const cy = gameSize.height / 2;
         
-        if (this.titleText) this.titleText.setPosition(cx, 60);
+        if (this.titleText) this.titleText.setPosition(cx, 45);
+        if (this.levelSelectText) this.levelSelectText.setPosition(cx, 88);
+        if (this.customizeBtnBg) {
+            this.customizeBtnBg.setPosition(cx, 126);
+            this.customizeBtnText.setPosition(cx, 126);
+        }
         this.createLevelCards(cx, cy);
         if (this.tutorialText) this.tutorialText.setPosition(cx, gameSize.height - 30);
     }

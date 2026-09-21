@@ -34,3 +34,29 @@ export function calculateTurnRate(segments: number): number {
     // Base turn rate minus penalty (e.g. 0.1 - up to 0.025)
     return GameBalance.player.turnRate * (1 - penalty);
 }
+
+export function getTailScale(segmentIndex: number, totalSegments: number): number {
+    if (totalSegments <= 0) return 1.0;
+    const fromEnd = totalSegments - 1 - segmentIndex;
+    if (fromEnd === 0) return 0.5;
+    if (fromEnd === 1) return 0.65;
+    if (fromEnd === 2) return 0.85;
+    return 1.0;
+}
+
+export function isMagnetEligible(playerValue: number, targetValue: number, isBoss: boolean = false): boolean {
+    if (isBoss) return false;
+    return targetValue < playerValue;
+}
+
+export function calculateOrbRewards(
+    currentScore: number,
+    currentBoost: number,
+    maxBoost: number = GameBalance.player.maxBoostEnergy
+): { newScore: number; newBoost: number; valueGain: number } {
+    return {
+        newScore: currentScore + GameBalance.orb.scoreReward,
+        newBoost: Math.min(maxBoost, currentBoost + GameBalance.orb.boostReward),
+        valueGain: 0
+    };
+}

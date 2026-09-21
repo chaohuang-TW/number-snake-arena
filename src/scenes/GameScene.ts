@@ -10,11 +10,15 @@ import { AudioSystem } from '../systems/AudioSystem';
 import { GameBalance } from '../config/gameBalance';
 import { isEdible, calculateDamage, calculateNewBodySegments } from '../utils/gameRules';
 import { DebugUI } from '../ui/DebugUI';
+import { MagnetAbility } from '../systems/MagnetAbility';
+import { CollectibleOrb } from '../entities/CollectibleOrb';
 
 export class GameScene extends Phaser.Scene {
     player!: PlayerSnake;
     enemies: NumberEnemy[] = [];
     boss: NumberBoss | null = null;
+    orbs: CollectibleOrb[] = [];
+    magnet!: MagnetAbility;
     
     joystick!: VirtualJoystick;
     hud!: HUD;
@@ -30,7 +34,8 @@ export class GameScene extends Phaser.Scene {
         down: Phaser.Input.Keyboard.Key,
         left: Phaser.Input.Keyboard.Key,
         right: Phaser.Input.Keyboard.Key,
-        space: Phaser.Input.Keyboard.Key
+        space: Phaser.Input.Keyboard.Key,
+        m: Phaser.Input.Keyboard.Key
     };
 
     comboCount: number = 0;
@@ -63,6 +68,7 @@ export class GameScene extends Phaser.Scene {
     create() {
         this.gameState = 'RUNNING';
         this.enemies = [];
+        this.orbs = [];
         this.boss = null;
         this.bossSpawned = false;
         this.comboCount = 0;
@@ -72,29 +78,24 @@ export class GameScene extends Phaser.Scene {
         this.lastEdibleCheckTime = this.time.now;
 
         // World setup
-        
-        
         const ww = GameBalance.world.width;
         const wh = GameBalance.world.height;
         this.physics.world.setBounds(-ww/2, -wh/2, ww, wh);
         this.cameras.main.setBounds(-ww/2, -wh/2, ww, wh);
 
-        // Visual Boundary
-        const boundary = this.add.graphics();
-        boundary.lineStyle(10, 0x00ffff, 0.3);
-        boundary.strokeRect(-ww/2, -wh/2, ww, wh);
-        boundary.setDepth(-10);
-
-        this.grid = this.add.grid(0, 0, ww, wh, 100, 100, 0x000000, 0, 0x333333, 0.2);
-        this.grid.setDepth(-11);
+        // Data-driven background theme
+        this.createBackgroundTheme();
 
         const maxHP = ProgressionManager.getMaxHP();
         this.player = new PlayerSnake(this, 0, 0, this.levelDef.startValue, maxHP);
         this.cameras.main.startFollow(this.player.head, true, 0.1, 0.1);
         this.cameras.main.setZoom(1);
 
+        // Systems
+        this.magnet = new MagnetAbility(this);
         this.joystick = new VirtualJoystick(this);
         this.hud = new HUD(this);
+        this.hud.onMagnetTrigger = () => this.activateMagnet();
         this.audio = new AudioSystem(this);
         
         const urlParams = new URLSearchParams(window.location.search);
@@ -131,8 +132,8 @@ export class GameScene extends Phaser.Scene {
                 getTargetAngle: () => this.player.targetAngle,
                 getBoostEnergy: () => this.player.boostEnergy,
 
-                spawnEnemy: (val: number, x: number, y: number) => {
-                    const e = new NumberEnemy(this, x, y, val);
+                spawnEnemy: (val: number, x: number, y: number, skinStyle?: string) => {
+                    const e = new NumberEnemy(this, x, y, val, skinStyle);
                     this.enemies.push(e);
                     return e;
                 },
@@ -164,28 +165,32 @@ export class GameScene extends Phaser.Scene {
                     this.handleVisibilityChange();
                 },
                 getResizeListenerCount: () => this.scale.listenerCount('resize'),
-                stopSpawning: () => { this.spawnTimer = 9999999; for (const e of this.enemies) { e.destroy(); } this.enemies = []; },
+                stopSpawning: () => this.stopSpawning(),
                 getPlayerPos: () => ({ x: this.player.head.x, y: this.player.head.y }),
                 restartGame: () => { this.scene.start('GameScene'); },
-                hardReset: () => {
-                    this.player.value = this.levelDef.startValue;
-                    this.player.hp = ProgressionManager.getMaxHP();
-                    this.player.segments = 5;
-                    this.player.boostEnergy = 100;
-                    this.comboCount = 0;
-                    this.player.isInvulnerable = false;
-                    for (const e of this.enemies) { e.destroy(); }
-                    this.enemies = [];
-                    if (this.boss) { this.boss.destroy(); this.boss = null; this.bossSpawned = false; }
-                    this.spawnTimer = 9999999;
-                }
+                hardReset: () => this.hardReset(),
+                // v0.4.0 Debug APIs
+                getMagnetState: () => this.magnet.state,
+                activateMagnetForTest: () => this.activateMagnet(),
+                getActiveOrbCount: () => this.orbs.length,
+                getPlayerHeadSkin: () => this.player.headSkinId,
+                setPlayerHeadSkinForTest: (id: string) => this.player.setHeadSkin(id),
+                getEnemyVisualInfo: (index: number) => ({
+                    headSkinId: this.enemies[index]?.headSkinId,
+                    segmentCount: this.enemies[index]?.bodySprites?.length
+                }),
+                getCurrentThemeKey: () => this.levelDef.theme,
+                getOrbs: () => this.orbs
             };
         } else {
             // Ensure no debug API exists in normal mode
             (window as any).__NUMBER_SNAKE_DEBUG__ = undefined;
         }
 
-        this.keys = this.input.keyboard!.addKeys('w,a,s,d,up,down,left,right,space') as any;
+        this.keys = this.input.keyboard!.addKeys('w,a,s,d,up,down,left,right,space,m') as any;
+        this.input.keyboard?.on('keydown-M', () => {
+            this.activateMagnet();
+        });
 
         this.scale.on('resize', this.resize, this);
 
@@ -195,9 +200,7 @@ export class GameScene extends Phaser.Scene {
         this.events.on('shutdown', this.teardown, this);
 
         // Initial spawn
-        
-        
-        for (let i=0; i<6; i++) {
+        for (let i = 0; i < 6; i++) {
             const angle = Math.random() * Math.PI * 2;
             const dist = 240 + Math.random() * 200;
             const sx = Phaser.Math.Clamp(Math.cos(angle) * dist, -ww/2+50, ww/2-50);
@@ -206,8 +209,100 @@ export class GameScene extends Phaser.Scene {
             const enemy = new NumberEnemy(this, sx, sy, val);
             this.enemies.push(enemy);
         }
-        for (let i=0; i<14; i++) this.spawnEnemy();
+        for (let i = 0; i < 14; i++) this.spawnEnemy();
+    }
 
+    createBackgroundTheme() {
+        const ww = GameBalance.world.width;
+        const wh = GameBalance.world.height;
+        const theme = this.levelDef.theme || 'neon-grid';
+
+        const bgGraphics = this.add.graphics();
+        bgGraphics.setDepth(-12);
+
+        let gridFill = 0x000000;
+        let gridLine = 0x333333;
+        let gridAlpha = 0.2;
+        let boundaryColor = 0x00ffff;
+
+        if (theme === 'neon-grid') {
+            // L1: Neon Grid - dark blue, cyan grid
+            bgGraphics.fillStyle(0x060c1a, 1);
+            bgGraphics.fillRect(-ww/2, -wh/2, ww, wh);
+            gridLine = 0x00ffff;
+            gridAlpha = 0.15;
+            boundaryColor = 0x00ffff;
+        } else if (theme === 'cyber-city') {
+            // L2: Cyber City - dark navy/purple, magenta/purple lines
+            bgGraphics.fillStyle(0x0e0c24, 1);
+            bgGraphics.fillRect(-ww/2, -wh/2, ww, wh);
+            gridLine = 0xcc00ff;
+            gridAlpha = 0.15;
+            boundaryColor = 0xff00cc;
+            // Distant geometric city lines
+            bgGraphics.lineStyle(1.5, 0x8800bb, 0.12);
+            for (let x = -ww/2 + 200; x < ww/2; x += 300) {
+                const h = 200 + ((Math.abs(x) * 7) % 300);
+                bgGraphics.strokeRect(x, wh/2 - h, 140, h);
+            }
+        } else if (theme === 'lava-core') {
+            // L3: Lava Core - dark charcoal, red/orange energy cracks
+            bgGraphics.fillStyle(0x180b0b, 1);
+            bgGraphics.fillRect(-ww/2, -wh/2, ww, wh);
+            gridLine = 0xff3300;
+            gridAlpha = 0.18;
+            boundaryColor = 0xff5500;
+            // Lava cracks
+            bgGraphics.lineStyle(2, 0xff6600, 0.15);
+            for (let i = 0; i < 20; i++) {
+                const cx = -ww/2 + 100 + (i * 115) % (ww - 200);
+                const cy = -wh/2 + 100 + (i * 97) % (wh - 200);
+                bgGraphics.beginPath();
+                bgGraphics.moveTo(cx, cy);
+                bgGraphics.lineTo(cx + 40, cy + 25);
+                bgGraphics.lineTo(cx + 70, cy + 10);
+                bgGraphics.strokePath();
+            }
+        } else if (theme === 'deep-space') {
+            // L4: Deep Space - black/deep purple, stars & cosmic rings
+            bgGraphics.fillStyle(0x050310, 1);
+            bgGraphics.fillRect(-ww/2, -wh/2, ww, wh);
+            gridLine = 0x443377;
+            gridAlpha = 0.12;
+            boundaryColor = 0x9955ff;
+            // Stars
+            bgGraphics.fillStyle(0xffffff, 0.4);
+            for (let i = 0; i < 60; i++) {
+                const sx = -ww/2 + ((i * 137) % ww);
+                const sy = -wh/2 + ((i * 241) % wh);
+                const r = (i % 3 === 0) ? 2 : 1;
+                bgGraphics.fillCircle(sx, sy, r);
+            }
+            // Cosmic ring
+            bgGraphics.lineStyle(2, 0x9955ff, 0.1);
+            bgGraphics.strokeCircle(0, 0, 450);
+            bgGraphics.strokeCircle(0, 0, 750);
+        }
+
+        this.grid = this.add.grid(0, 0, ww, wh, 100, 100, gridFill, 0, gridLine, gridAlpha);
+        this.grid.setDepth(-11);
+
+        // Visual Boundary
+        const boundary = this.add.graphics();
+        boundary.lineStyle(10, boundaryColor, 0.35);
+        boundary.strokeRect(-ww/2, -wh/2, ww, wh);
+        boundary.setDepth(-10);
+    }
+
+    activateMagnet() {
+        this.magnet.activate();
+    }
+
+    clearOrbs() {
+        for (const orb of this.orbs) {
+            orb.destroy();
+        }
+        this.orbs = [];
     }
 
     handleVisibilityChange = () => {
@@ -243,6 +338,32 @@ export class GameScene extends Phaser.Scene {
         }
         this.player.update(dt, isBoosting);
 
+        // Magnet desktop trigger & update
+        if (Phaser.Input.Keyboard.JustDown(this.keys.m)) {
+            this.activateMagnet();
+        }
+        this.magnet.update(dt, this.player.head.x, this.player.head.y, this.player.value, this.enemies, this.orbs);
+
+        // Collectible Orbs Update & Collection
+        for (let i = this.orbs.length - 1; i >= 0; i--) {
+            const orb = this.orbs[i];
+            orb.update(time, dt);
+            if (orb.isExpired(time)) {
+                orb.destroy();
+                this.orbs.splice(i, 1);
+                continue;
+            }
+            // Head overlap collects orb
+            const dist = Phaser.Math.Distance.Between(this.player.head.x, this.player.head.y, orb.sprite.x, orb.sprite.y);
+            if (dist < 32) {
+                orb.destroy();
+                this.orbs.splice(i, 1);
+                this.hud.addScore(GameBalance.orb.scoreReward);
+                this.player.boostEnergy = Math.min(GameBalance.player.maxBoostEnergy, this.player.boostEnergy + GameBalance.orb.boostReward);
+                this.createParticles(orb.sprite.x, orb.sprite.y, 0xffff00, 6);
+            }
+        }
+
         // Dynamic Camera Zoom
         const targetZoom = 1 - (this.player.segments * 0.002);
         const clampedZoom = Phaser.Math.Clamp(targetZoom, 0.7, 1);
@@ -251,8 +372,6 @@ export class GameScene extends Phaser.Scene {
         if (time - this.lastEatTime > GameBalance.combo.window) {
             this.comboCount = 0;
         }
-
-
 
         // Assist: Early Game Rescue
         if (!this.bossSpawned && this.player.value < GameBalance.assist.earlyGameRescueValue) {
@@ -307,7 +426,6 @@ export class GameScene extends Phaser.Scene {
         }
 
         // Boss Logic
-
         if (this.player.value >= this.levelDef.bossTriggerValue && !this.bossSpawned) {
             this.spawnBoss();
         }
@@ -330,7 +448,35 @@ export class GameScene extends Phaser.Scene {
             this.debugUI.update();
         }
 
-        this.hud.update(this.player.hp, ProgressionManager.getMaxHP(), this.player.boostEnergy, GameBalance.player.maxBoostEnergy);
+        this.hud.update(
+            this.player.hp,
+            ProgressionManager.getMaxHP(),
+            this.player.boostEnergy,
+            GameBalance.player.maxBoostEnergy,
+            this.magnet.getHUDText(),
+            this.magnet.state
+        );
+    }
+
+    hardReset() {
+        this.player.value = this.levelDef.startValue;
+        this.player.hp = ProgressionManager.getMaxHP();
+        this.player.segments = 5;
+        this.player.boostEnergy = 100;
+        this.comboCount = 0;
+        this.player.isInvulnerable = false;
+        for (const e of this.enemies) { e.destroy(); }
+        this.enemies = [];
+        this.clearOrbs();
+        this.magnet.reset();
+        if (this.boss) { this.boss.destroy(); this.boss = null; this.bossSpawned = false; }
+        this.spawnTimer = 9999999;
+    }
+
+    stopSpawning() {
+        this.spawnTimer = 9999999;
+        for (const e of this.enemies) { e.destroy(); }
+        this.enemies = [];
     }
 
     spawnEnemy(isRescue = false) {
@@ -360,8 +506,6 @@ export class GameScene extends Phaser.Scene {
             } else {
                 role = 'giant';
                 val = Math.floor(pVal * 2.5 + Math.random() * (pVal * 0.5));
-                
-                // Keep some early hunters
                 if (gameTime < 15000) {
                     role = 'hunter';
                     val = Math.floor(pVal + Math.random() * (pVal * 0.6));
@@ -390,10 +534,7 @@ export class GameScene extends Phaser.Scene {
             let dist = range.min + Math.random() * (range.max - range.min);
             
             if (isRescue) {
-                // Bias towards available interior space while keeping distance
-                // Let's pick a few angles and take the one that gives the safest interior spot
                 const vAngle = Math.atan2(this.player.head.body ? (this.player.head.body as Phaser.Physics.Arcade.Body).velocity.y : 0, this.player.head.body ? (this.player.head.body as Phaser.Physics.Arcade.Body).velocity.x : 0);
-                
                 let bestAngle = angle;
                 let bestMargin = -9999;
                 
@@ -413,10 +554,8 @@ export class GameScene extends Phaser.Scene {
             sx = this.player.head.x + Math.cos(angle) * dist;
             sy = this.player.head.y + Math.sin(angle) * dist;
             
-            // Check interior safe rectangle
             if (sx >= -hw + SPAWN_EDGE_MARGIN && sx <= hw - SPAWN_EDGE_MARGIN &&
                 sy >= -hh + SPAWN_EDGE_MARGIN && sy <= hh - SPAWN_EDGE_MARGIN) {
-                
                 const actualDist = Phaser.Math.Distance.Between(this.player.head.x, this.player.head.y, sx, sy);
                 if (actualDist >= range.min - 10) {
                     validSpawn = true;
@@ -426,21 +565,19 @@ export class GameScene extends Phaser.Scene {
         }
 
         if (!validSpawn) {
-            // Safe fallback towards the center of the world
             const angleToCenter = Math.atan2(-this.player.head.y, -this.player.head.x);
             sx = this.player.head.x + Math.cos(angleToCenter) * range.min;
             sy = this.player.head.y + Math.sin(angleToCenter) * range.min;
-            // Hard clamp just in case world center is too close (should never happen if world is big enough)
             sx = Phaser.Math.Clamp(sx, -hw + SPAWN_EDGE_MARGIN, hw - SPAWN_EDGE_MARGIN);
             sy = Phaser.Math.Clamp(sy, -hh + SPAWN_EDGE_MARGIN, hh - SPAWN_EDGE_MARGIN);
         }
 
         const enemy = new NumberEnemy(this, sx, sy, val);
         this.enemies.push(enemy);
+        return enemy;
     }
 
     spawnBoss() {
-
         this.bossSpawned = true;
         
         let sx = 0, sy = 0;
@@ -495,9 +632,17 @@ export class GameScene extends Phaser.Scene {
 
             this.createParticles(e.body.x, e.body.y, 0x00ff00);
             
-            // Reversal cue check inside update is enough, but maybe text cue?
+            // Spawn body orbs from former body positions
+            const dropPositions = e.getDropPositions();
+            for (const pos of dropPositions) {
+                if (this.orbs.length >= GameBalance.orb.maxActive) {
+                    const oldest = this.orbs.shift();
+                    oldest?.destroy();
+                }
+                this.orbs.push(new CollectibleOrb(this, pos.x, pos.y));
+            }
+
             const oldVal = this.player.value - e.value;
-            // Check if this eat makes any current hunter flee
             if (this.boss && this.player.value > this.levelDef.bossValue && oldVal <= this.levelDef.bossValue) {
                 this.showReversalText(`NOW HUNT ${this.levelDef.bossValue}!`);
                 this.audio.playBossReversal();
@@ -509,9 +654,12 @@ export class GameScene extends Phaser.Scene {
             
         } else if (!this.player.isInvulnerable) {
             // DAMAGE
-            const dmg = calculateDamage(this.player.value, e.value); console.error(`handleEnemyCollision! pVal=${this.player.value} eVal=${e.value} dmg=`, dmg);
+            const dmg = calculateDamage(this.player.value, e.value);
             if (dmg.instantKO) {
-                console.error(`gameOver called! gameState was ${this.gameState}`); this.gameState = 'GAME_OVER'; this.audio.playGameOver(); this.saveScore(); this.showEndScreen('GAME OVER', '#ff0000');
+                this.gameState = 'GAME_OVER';
+                this.audio.playGameOver();
+                this.saveScore();
+                this.showEndScreen('GAME OVER', '#ff0000');
             } else if (dmg.hpLoss > 0) {
                 const newSeg = calculateNewBodySegments(this.player.segments, dmg.hpLoss);
                 const angle = Math.atan2(this.player.head.y - e.body.y, this.player.head.x - e.body.x);
@@ -519,7 +667,10 @@ export class GameScene extends Phaser.Scene {
                 this.cameras.main.shake(200, 0.01);
                 this.audio.playHitSFX();
                 if (this.player.hp <= 0) {
-                    console.error(`gameOver called! gameState was ${this.gameState}`); this.gameState = 'GAME_OVER'; this.audio.playGameOver(); this.saveScore(); this.showEndScreen('GAME OVER', '#ff0000');
+                    this.gameState = 'GAME_OVER';
+                    this.audio.playGameOver();
+                    this.saveScore();
+                    this.showEndScreen('GAME OVER', '#ff0000');
                 }
             }
         }
@@ -538,7 +689,10 @@ export class GameScene extends Phaser.Scene {
             // DAMAGE
             const dmg = calculateDamage(this.player.value, this.boss!.value);
             if (dmg.instantKO) {
-                console.error(`gameOver called! gameState was ${this.gameState}`); this.gameState = 'GAME_OVER'; this.audio.playGameOver(); this.saveScore(); this.showEndScreen('GAME OVER', '#ff0000');
+                this.gameState = 'GAME_OVER';
+                this.audio.playGameOver();
+                this.saveScore();
+                this.showEndScreen('GAME OVER', '#ff0000');
             } else if (dmg.hpLoss > 0) {
                 const newSeg = calculateNewBodySegments(this.player.segments, dmg.hpLoss);
                 const angle = Math.atan2(this.player.head.y - this.boss!.body.y, this.player.head.x - this.boss!.body.x);
@@ -546,7 +700,10 @@ export class GameScene extends Phaser.Scene {
                 this.cameras.main.shake(200, 0.01);
                 this.audio.playHitSFX();
                 if (this.player.hp <= 0) {
-                    console.error(`gameOver called! gameState was ${this.gameState}`); this.gameState = 'GAME_OVER'; this.audio.playGameOver(); this.saveScore(); this.showEndScreen('GAME OVER', '#ff0000');
+                    this.gameState = 'GAME_OVER';
+                    this.audio.playGameOver();
+                    this.saveScore();
+                    this.showEndScreen('GAME OVER', '#ff0000');
                 }
             }
         }
@@ -558,45 +715,43 @@ export class GameScene extends Phaser.Scene {
         }).setOrigin(0.5).setDepth(200);
         
         this.tweens.add({
-            targets: t, y: t.y - 50, alpha: 0, duration: 1500,
+            targets: t, y: t.y - 40, alpha: 0, duration: 1500,
             onComplete: () => t.destroy()
         });
     }
 
-    createParticles(x: number, y: number, color: number, count: number = 10) {
-        const emitter = this.add.particles(x, y, 'particle', {
-            speed: { min: 50, max: 200 },
-            angle: { min: 0, max: 360 },
-            scale: { start: 1, end: 0 },
-            lifespan: 500,
-            tint: color,
-            quantity: count,
-            emitting: false
-        });
-        emitter.setDepth(150);
-        emitter.explode(count);
-        setTimeout(() => emitter.destroy(), 600);
+    createParticles(x: number, y: number, color: number, count = 20) {
+        for (let i = 0; i < count; i++) {
+            const p = this.add.circle(x, y, 4, color).setDepth(150);
+            const angle = Math.random() * Math.PI * 2;
+            const speed = 50 + Math.random() * 150;
+            this.physics.add.existing(p);
+            (p.body as Phaser.Physics.Arcade.Body).setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
+            
+            this.tweens.add({
+                targets: p, alpha: 0, scale: 0.1, duration: 600,
+                onComplete: () => p.destroy()
+            });
+        }
     }
 
-    
     levelClear() {
         this.gameState = 'LEVEL_CLEAR';
         this.saveScore();
-        
-        // Handle progression
-        let newlyUnlocked = false;
+        this.clearOrbs();
+        this.audio.playVictory();
+
         let newlyClaimedReward = false;
-        
         if (this.levelDef.reward) {
             newlyClaimedReward = ProgressionManager.claimReward(this.levelDef.reward.id, this.levelDef.reward.value);
         }
-        
+
+        let newlyUnlocked = false;
         if (this.levelDef.nextLevelId) {
             newlyUnlocked = ProgressionManager.unlockLevel(this.levelDef.nextLevelId);
         }
 
-        // Delay slightly for boss defeat FX
-        this.time.delayedCall(400, () => {
+        this.time.delayedCall(1000, () => {
             this.showLevelClearScreen(newlyClaimedReward, newlyUnlocked);
         });
     }
@@ -629,10 +784,8 @@ export class GameScene extends Phaser.Scene {
             const newMax = ProgressionManager.getMaxHP();
             const heartText = this.add.text(cx, currentY + 40, `${oldMax} HEARTS`, { fontSize: '32px' }).setOrigin(0.5).setDepth(301);
             
-            // Animate reward
             this.time.delayedCall(800, () => {
                 heartText.setText(`${oldMax} → ${newMax} HEARTS`);
-                // quick scale bounce
                 this.tweens.add({
                     targets: heartText,
                     scale: 1.5,
@@ -709,6 +862,7 @@ export class GameScene extends Phaser.Scene {
 
     gameOver() {
         this.gameState = 'GAME_OVER';
+        this.clearOrbs();
         this.audio.playGameOver();
         this.saveScore();
         this.showEndScreen('GAME OVER', '#ff0000');
@@ -716,6 +870,7 @@ export class GameScene extends Phaser.Scene {
 
     victory() {
         this.gameState = 'VICTORY';
+        this.clearOrbs();
         this.audio.playVictory();
         this.saveScore();
         this.showEndScreen('VICTORY', '#00ff00');
@@ -723,10 +878,8 @@ export class GameScene extends Phaser.Scene {
 
     saveScore() {
         const s = this.hud.getScore();
-        // Legacy
         const b = parseInt(localStorage.getItem('bestScore') || '0', 10);
         if (s > b) localStorage.setItem('bestScore', s.toString());
-        // Progression Manager
         ProgressionManager.submitScore(this.levelId, s);
     }
 
@@ -756,8 +909,10 @@ export class GameScene extends Phaser.Scene {
         document.removeEventListener('visibilitychange', this.handleVisibilityChange);
         this.scale.off('resize', this.resize, this);
         this.enemies.forEach(e => e.destroy());
+        this.clearOrbs();
         this.player.destroy();
         this.boss?.destroy();
+        this.magnet?.destroy();
         if (this.debugUI) this.debugUI.text.destroy();
     }
 

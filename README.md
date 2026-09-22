@@ -1,12 +1,18 @@
 # NUMBER SNAKE ARENA 🐍
 
-**Version:** `v0.5.1`
-**Status:** Responsive & Acceptance Closeout: Mobile leaderboard layout fix, pure layout geometry validation, clean production routing, full responsive overlap tests.
+**Version:** `v0.5.2`
+**Status:** Boss Boundary Hotfix: Complete arena boundary protection for all Bosses (soft inward steering, Arcade world collision, hard clamp failsafe), dynamic off-screen Boss direction locator, guaranteed arena containment with no balance changes.
 
 A web-based arcade game where you control a snake of numbers, growing by eating smaller numbers while avoiding larger ones.
 
 ## Gameplay & Features
 
+* **Boss Boundary Protection & Containment**:
+  * **Soft Inward Steering**: When approaching arena boundaries, Bosses blend desired fleeing/chasing trajectories with inward steering vectors to smoothly turn and curve along edges.
+  * **Collinear Deadlock Avoidance**: Tangential deflections prevent Bosses from stalling when trapped between player and wall.
+  * **World Collision & Hard Failsafe Clamp**: Prevents Bosses from ever escaping the playable 2400×1600 arena (`[-1100, 1100] × [-700, 700]` safe center range).
+  * **Off-Screen Boss Locator**: When an active Boss is outside the camera view, an edge indicator (`▶ BOSS <value>`) points towards the Boss, smoothly avoiding all HUD and touch controls. Automatically hidden when the Boss is on camera.
+  * **Preserved Balance**: 100/200/300/400 Boss values, strict `>` edible rule, and 0.6 speed multiplier remain unchanged.
 * **Grow**: Eat numbers strictly smaller than your current value to grow.
 * **Survive**: Touching a larger number causes you to lose HP and shrink.
 * **Role Reversal**: If you grow larger than a previously dangerous number, it will start fleeing from you!

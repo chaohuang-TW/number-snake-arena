@@ -13,6 +13,8 @@ import { DebugUI } from '../ui/DebugUI';
 import { MagnetAbility } from '../systems/MagnetAbility';
 import { CollectibleOrb } from '../entities/CollectibleOrb';
 import { LeaderboardPanel } from '../ui/LeaderboardPanel';
+import { BossIndicator } from '../ui/BossIndicator';
+import type { RectBounds } from '../utils/layout';
 import { getRankingResult, type ArenaParticipant, type RankingResult } from '../utils/ranking';
 import { normalizeStartValue } from '../utils/prepValues';
 
@@ -20,6 +22,7 @@ export class GameScene extends Phaser.Scene {
     player!: PlayerSnake;
     enemies: NumberEnemy[] = [];
     boss: NumberBoss | null = null;
+    bossIndicator!: BossIndicator;
     orbs: CollectibleOrb[] = [];
     magnet!: MagnetAbility;
     
@@ -115,8 +118,9 @@ export class GameScene extends Phaser.Scene {
         this.hud.setBestScore(ProgressionManager.getBestScore(this.levelId));
         this.audio = new AudioSystem(this);
 
-        // Leaderboard panel and world crown
+        // Leaderboard panel, boss indicator, and world crown
         this.leaderboard = new LeaderboardPanel(this);
+        this.bossIndicator = new BossIndicator(this);
         this.worldCrown = this.add.image(0, -9999, 'crown_gold').setDepth(205).setVisible(false);
 
         this.leaderboardTimer = this.time.addEvent({
@@ -171,6 +175,15 @@ export class GameScene extends Phaser.Scene {
                     if (!this.bossSpawned) this.spawnBoss();
                 },
                 getBossState: () => this.boss ? (this.boss.isFleeing ? 'FLEE' : 'CHASE') : 'NONE',
+                getBossPosition: () => this.boss && this.boss.body ? { x: this.boss.body.x, y: this.boss.body.y } : null,
+                setBossPositionForTest: (x: number, y: number) => {
+                    if (this.boss && this.boss.body) {
+                        this.boss.body.setPosition(x, y);
+                        this.boss.valueText.setPosition(x, y);
+                    }
+                },
+                getBossVelocity: () => this.boss && this.boss.body && this.boss.body.body ? { x: this.boss.body.body.velocity.x, y: this.boss.body.body.velocity.y } : { x: 0, y: 0 },
+                getBossIndicatorState: () => this.bossIndicator ? this.bossIndicator.getState() : { visible: false, x: 0, y: 0, value: 0, text: '', angle: 0, bounds: null },
                 forceSpecificEnemy: (e: any) => { this.player.isInvulnerable = false; this.handleEnemyCollision(e, 0, this.time.now); },
                 forceCollisionWithEnemy: (index: number) => {
                     this.player.isInvulnerable = false;
@@ -481,9 +494,14 @@ export class GameScene extends Phaser.Scene {
 
         if (this.boss) {
             this.boss.update(this.player.head.x, this.player.head.y, this.player.value);
+            if (this.bossIndicator) {
+                this.bossIndicator.update(this.boss, this.cameras.main, this.getObstacleBounds());
+            }
             if (this.physics.overlap(this.player.head, this.boss.body)) {
                 this.handleBossCollision();
             }
+        } else if (this.bossIndicator) {
+            this.bossIndicator.hide();
         }
 
         // Spawning
@@ -837,6 +855,7 @@ export class GameScene extends Phaser.Scene {
     handleBossCollision() {
         if (this.player.value > this.boss!.value) {
             // Victory
+            if (this.bossIndicator) this.bossIndicator.hide();
             this.boss!.destroy();
             this.boss = null;
             this.createParticles(this.player.head.x, this.player.head.y, 0xff0055, 50);
@@ -895,6 +914,7 @@ export class GameScene extends Phaser.Scene {
 
     levelClear() {
         this.gameState = 'LEVEL_CLEAR';
+        if (this.bossIndicator) this.bossIndicator.hide();
         this.saveScore();
         this.clearOrbs();
         this.audio.playVictory();
@@ -1039,6 +1059,7 @@ export class GameScene extends Phaser.Scene {
 
     gameOver() {
         this.gameState = 'GAME_OVER';
+        if (this.bossIndicator) this.bossIndicator.hide();
         if (this.worldCrown) this.worldCrown.setVisible(false);
         this.clearOrbs();
         this.audio.playGameOver();
@@ -1048,6 +1069,7 @@ export class GameScene extends Phaser.Scene {
 
     victory() {
         this.gameState = 'VICTORY';
+        if (this.bossIndicator) this.bossIndicator.hide();
         if (this.worldCrown) this.worldCrown.setVisible(false);
         this.clearOrbs();
         this.audio.playVictory();
@@ -1102,6 +1124,7 @@ export class GameScene extends Phaser.Scene {
         this.leaderboardTimer?.remove();
         this.worldCrown?.destroy();
         this.leaderboard?.destroy();
+        this.bossIndicator?.destroy();
         this.enemies.forEach(e => e.destroy());
         this.clearOrbs();
         this.player.destroy();
@@ -1114,6 +1137,27 @@ export class GameScene extends Phaser.Scene {
         this.joystick.resize(gameSize);
         this.hud.resize(gameSize);
         this.leaderboard?.resize(gameSize);
+        this.bossIndicator?.resize(gameSize);
+    }
+
+    getObstacleBounds(): RectBounds[] {
+        const list: RectBounds[] = [];
+        if (this.hud) {
+            list.push(this.hud.getHPBounds());
+            list.push(this.hud.getScoreBounds());
+            list.push(this.hud.getBestBounds());
+            list.push(this.hud.getMagnetHUDBounds());
+            list.push(this.hud.getBoostBarBounds());
+            list.push(this.hud.getBoostButtonBounds());
+            list.push(this.hud.getMagnetButtonBounds());
+        }
+        if (this.leaderboard) {
+            list.push(this.leaderboard.getBounds());
+        }
+        if (this.joystick) {
+            list.push(this.joystick.getBounds());
+        }
+        return list;
     }
 
     getLayoutBounds() {
@@ -1126,7 +1170,8 @@ export class GameScene extends Phaser.Scene {
             boostButton: this.hud.getBoostButtonBounds(),
             magnetButton: this.hud.getMagnetButtonBounds(),
             joystick: this.joystick.getBounds(),
-            leaderboard: this.leaderboard.getBounds()
+            leaderboard: this.leaderboard.getBounds(),
+            bossIndicator: this.bossIndicator ? this.bossIndicator.getBounds() : null
         };
     }
 }

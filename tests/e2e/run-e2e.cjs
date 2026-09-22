@@ -2585,11 +2585,23 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
     // --- Test AV: REAL START VALUE ---
     console.log('\n--- Test AV: REAL START VALUE ---');
     const clickPrepCard = async (val) => {
+        await v5Page.waitForFunction((v) => {
+            const ps = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
+            return ps && ps.cardBgs && ps.cardBgs.some(b => b.name === `prepCard_${v}`);
+        }, val, { timeout: 10000 });
+        await v5Page.waitForTimeout(150);
         const cardCoord = await v5Page.evaluate((v) => {
             const ps = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
             const cardBg = ps.cardBgs.find(b => b.name === `prepCard_${v}`);
             const container = cardBg.parentContainer;
-            return { x: container.x + cardBg.x, y: container.y + cardBg.y };
+            const canvas = window.__PHASER_GAME__.canvas;
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = rect.width / window.__PHASER_GAME__.scale.width;
+            const scaleY = rect.height / window.__PHASER_GAME__.scale.height;
+            return {
+                x: rect.left + (container.x + cardBg.x) * scaleX,
+                y: rect.top + (container.y + cardBg.y) * scaleY
+            };
         }, val);
         await v5Page.mouse.click(cardCoord.x, cardCoord.y);
         await v5Page.waitForFunction((v) => {
@@ -2600,9 +2612,17 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
     };
 
     const clickStartLevel = async () => {
+        await v5Page.waitForTimeout(150);
         const btnCoord = await v5Page.evaluate(() => {
             const ps = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
-            return { x: ps.startLevelBtnBg.x, y: ps.startLevelBtnBg.y };
+            const canvas = window.__PHASER_GAME__.canvas;
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = rect.width / window.__PHASER_GAME__.scale.width;
+            const scaleY = rect.height / window.__PHASER_GAME__.scale.height;
+            return {
+                x: rect.left + ps.startLevelBtnBg.x * scaleX,
+                y: rect.top + ps.startLevelBtnBg.y * scaleY
+            };
         });
         await v5Page.mouse.click(btnCoord.x, btnCoord.y);
     };
@@ -2715,6 +2735,7 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
         return gs && gs.children.list.some(c => c.name === 'playAgainBtn' || (c.type === 'Text' && c.text === 'PLAY AGAIN'));
     }, { timeout: 10000 });
+    await v5Page.waitForTimeout(300);
     const goBtnCoord = await v5Page.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
         const btn = gs.children.list.find(c => c.name === 'playAgainBtn' || (c.type === 'Text' && c.text === 'PLAY AGAIN'));
@@ -2742,6 +2763,9 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
 
     // 3. Level Clear REPLAY LEVEL real click (Level 1)
     await v5Page.evaluate(() => {
+        const prog = JSON.parse(localStorage.getItem('number_snake_progression') || '{}');
+        prog.highestUnlockedLevel = 4;
+        localStorage.setItem('number_snake_progression', JSON.stringify(prog));
         if (window.__NUMBER_SNAKE_DEBUG__ && window.__NUMBER_SNAKE_DEBUG__.getProgression) {
             window.__NUMBER_SNAKE_DEBUG__.getProgression().highestUnlockedLevel = 4;
         }
@@ -2757,6 +2781,7 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
         return gs && gs.children.list.some(c => c.name === 'replayBtn' || (c.type === 'Text' && c.text === 'REPLAY LEVEL'));
     }, { timeout: 10000 });
+    await v5Page.waitForTimeout(300);
     const replayBtnCoord = await v5Page.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
         const btn = gs.children.list.find(c => c.name === 'replayBtn' || (c.type === 'Text' && c.text === 'REPLAY LEVEL'));
@@ -3397,6 +3422,12 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
     // --- Test BF: PREP RESET TO DEFAULT 5 ON FRESH OPENING ---
     console.log('\n--- Test BF: PREP RESET TO DEFAULT 5 ON FRESH OPENING ---');
     await v5Page.setViewportSize({ width: 1024, height: 768 });
+    await v5Page.waitForTimeout(300);
+    await v5Page.evaluate(() => {
+        if (window.__PHASER_GAME__ && window.__PHASER_GAME__.scale) {
+            window.__PHASER_GAME__.scale.resize(1024, 768);
+        }
+    });
     await v5Page.waitForTimeout(200);
 
     // 1. Open Prep, click actual POWER / 10 card, verify selected visual state, click actual START LEVEL, assert run Value10
@@ -3434,6 +3465,7 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
         return gs && gs.children.list.some(c => c.name === 'playAgainBtn' || (c.type === 'Text' && c.text === 'PLAY AGAIN'));
     }, { timeout: 10000 });
+    await v5Page.waitForTimeout(300);
     const bfGoCoord = await v5Page.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
         const btn = gs.children.list.find(c => c.name === 'playAgainBtn' || (c.type === 'Text' && c.text === 'PLAY AGAIN'));
@@ -3473,6 +3505,7 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
         return gs && gs.children.list.some(c => c.name === 'replayBtn' || (c.type === 'Text' && c.text === 'REPLAY LEVEL'));
     }, { timeout: 10000 });
+    await v5Page.waitForTimeout(300);
     const bfReplayCoord = await v5Page.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
         const btn = gs.children.list.find(c => c.name === 'replayBtn' || (c.type === 'Text' && c.text === 'REPLAY LEVEL'));
@@ -3505,6 +3538,7 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
         return gs && gs.children.list.some(c => c.name === 'nextBtn' || (c.type === 'Text' && c.text === 'NEXT LEVEL'));
     }, { timeout: 10000 });
+    await v5Page.waitForTimeout(300);
     const bfNextCoord = await v5Page.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
         const btn = gs.children.list.find(c => c.name === 'nextBtn' || (c.type === 'Text' && c.text === 'NEXT LEVEL'));
@@ -3523,6 +3557,286 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
         return ps.getSelectedStartValue();
     });
     assert(freshPrepVal3 === 5, `BF: After NEXT LEVEL, next-level Prep resets to default 5, got ${freshPrepVal3}`);
+
+    // --- Test BG: BOSS WORLD BOUNDARY & CORNERS (Sections 21 & 22) ---
+    console.log('\n--- Test BG: BOSS WORLD BOUNDARY & CORNERS ---');
+    for (const lvl of [1, 2, 3, 4]) {
+        await v5Page.evaluate((l) => {
+            const prog = JSON.parse(localStorage.getItem('number_snake_progression') || '{}');
+            prog.highestUnlockedLevel = 4;
+            localStorage.setItem('number_snake_progression', JSON.stringify(prog));
+            if (window.__NUMBER_SNAKE_DEBUG__ && window.__NUMBER_SNAKE_DEBUG__.getProgression) {
+                window.__NUMBER_SNAKE_DEBUG__.getProgression().highestUnlockedLevel = 4;
+            }
+            window.__PHASER_GAME__.scene.stop('PrepScene');
+            window.__PHASER_GAME__.scene.start('GameScene', { levelId: l });
+        }, lvl);
+        await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('GameScene'), { timeout: 10000 });
+
+        // Spawn boss and check strict threshold
+        const bInfo = await v5Page.evaluate(() => {
+            const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+            gs.stopSpawning();
+            gs.spawnBoss();
+            const b = gs.boss;
+            
+            // Test strict threshold: value-1 -> CHASE, value -> CHASE, value+1 -> FLEE
+            gs.player.value = b.value - 1;
+            b.update(gs.player.head.x, gs.player.head.y, gs.player.value);
+            const s1 = b.isFleeing;
+
+            gs.player.value = b.value;
+            b.update(gs.player.head.x, gs.player.head.y, gs.player.value);
+            const s2 = b.isFleeing;
+
+            gs.player.value = b.value + 1;
+            b.update(gs.player.head.x, gs.player.head.y, gs.player.value);
+            const s3 = b.isFleeing;
+
+            return { value: b.value, s1, s2, s3 };
+        });
+
+        assert(bInfo.s1 === false, `L${lvl} Boss ${bInfo.value}: Value-1 is CHASE`);
+        assert(bInfo.s2 === false, `L${lvl} Boss ${bInfo.value}: Equal value is CHASE (strict > rule)`);
+        assert(bInfo.s3 === true, `L${lvl} Boss ${bInfo.value}: Value+1 is FLEE`);
+
+        // Test boundary positions: edges & 4 corners
+        const positions = [
+            { name: 'left edge', x: -1050, y: 0 },
+            { name: 'right edge', x: 1050, y: 0 },
+            { name: 'top edge', x: 0, y: -650 },
+            { name: 'bottom edge', x: 0, y: 650 },
+            { name: 'top-left corner', x: -1050, y: -650 },
+            { name: 'top-right corner', x: 1050, y: -650 },
+            { name: 'bottom-left corner', x: -1050, y: 650 },
+            { name: 'bottom-right corner', x: 1050, y: 650 }
+        ];
+
+        for (const pos of positions) {
+            await v5Page.evaluate((p) => {
+                const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+                gs.boss.body.setPosition(p.x, p.y);
+                gs.boss.valueText.setPosition(p.x, p.y);
+                // Position player slightly inward from boss so boss flees outward
+                gs.player.head.setPosition(p.x * 0.8, p.y * 0.8);
+            }, pos);
+
+            await v5Page.waitForTimeout(400);
+
+            const res = await v5Page.evaluate(() => {
+                const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+                const b = gs.boss;
+                const bx = b.body.x;
+                const by = b.body.y;
+                const vel = b.body.body.velocity;
+                return {
+                    x: bx,
+                    y: by,
+                    inBounds: bx >= -1100 && bx <= 1100 && by >= -700 && by <= 700,
+                    valid: !isNaN(bx) && !isNaN(by) && isFinite(bx) && isFinite(by) && !isNaN(vel.x) && !isNaN(vel.y)
+                };
+            });
+
+            assert(res.valid, `Boss ${bInfo.value} at ${pos.name}: finite valid velocity and coordinates`);
+            assert(res.inBounds, `Boss ${bInfo.value} at ${pos.name}: remains inside world limits (x=${res.x.toFixed(1)}, y=${res.y.toFixed(1)})`);
+        }
+    }
+
+    // --- Test BH: REAL FLEE STRESS (Section 23) ---
+    console.log('\n--- Test BH: REAL FLEE STRESS ---');
+    await v5Page.evaluate(() => {
+        window.__PHASER_GAME__.scene.stop('PrepScene');
+        window.__PHASER_GAME__.scene.start('GameScene', { levelId: 1 });
+    });
+    await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('GameScene'), { timeout: 10000 });
+
+    await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        gs.stopSpawning();
+        gs.spawnBoss();
+        gs.player.value = gs.boss.value + 1;
+        gs.boss.body.setPosition(0, 0);
+        gs.boss.valueText.setPosition(0, 0);
+        gs.player.head.setPosition(-200, 0);
+    });
+
+    // Run active gameplay frames for multiple seconds with player chasing behind boss
+    for (let step = 0; step < 10; step++) {
+        await v5Page.evaluate(() => {
+            const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+            if (gs.boss) {
+                // Keep player closely behind boss in fleeing direction
+                const bx = gs.boss.body.x;
+                const by = gs.boss.body.y;
+                const angle = Math.atan2(by, bx);
+                gs.player.head.setPosition(bx - Math.cos(angle) * 150, by - Math.sin(angle) * 150);
+            }
+        });
+        await v5Page.waitForTimeout(300);
+    }
+
+    const bhState = await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        const b = gs.boss;
+        const bx = b.body.x;
+        const by = b.body.y;
+        const vel = b.body.body.velocity;
+        const speed = Math.hypot(vel.x, vel.y);
+        return {
+            x: bx,
+            y: by,
+            speed,
+            isFleeing: b.isFleeing,
+            edible: gs.player.value > b.value,
+            inBounds: bx >= -1100 && bx <= 1100 && by >= -700 && by <= 700
+        };
+    });
+
+    assert(bhState.inBounds, `BH: After continuous FLEE stress, Boss center is inside world limits (x=${bhState.x.toFixed(1)}, y=${bhState.y.toFixed(1)})`);
+    assert(bhState.speed > 50, `BH: Boss continues moving without soft-lock freeze (speed=${bhState.speed.toFixed(1)})`);
+    assert(bhState.isFleeing === true, `BH: Boss state remains FLEE`);
+    assert(bhState.edible === true, `BH: Boss remains edible`);
+
+    // --- Test BI: PLAYER CAN CATCH BOSS (Section 24) ---
+    console.log('\n--- Test BI: PLAYER CAN CATCH BOSS ---');
+    const catchResult = await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        const b = gs.boss;
+        b.body.setPosition(400, 0);
+        b.valueText.setPosition(400, 0);
+        gs.player.head.setPosition(100, 0);
+        gs.player.currentAngle = 0;
+        gs.player.targetAngle = 0;
+        gs.player.value = b.value + 1;
+
+        const initialDist = Math.hypot(b.body.x - gs.player.head.x, b.body.y - gs.player.head.y);
+
+        // Simulate 30 frames with player boost (340 px/s) vs boss (132 px/s)
+        for (let f = 0; f < 30; f++) {
+            const angle = Math.atan2(b.body.y - gs.player.head.y, b.body.x - gs.player.head.x);
+            gs.player.head.setVelocity(Math.cos(angle) * 340, Math.sin(angle) * 340);
+            b.update(gs.player.head.x, gs.player.head.y, gs.player.value);
+            gs.player.head.x += gs.player.head.body.velocity.x * 0.016;
+            gs.player.head.y += gs.player.head.body.velocity.y * 0.016;
+            b.body.x += b.body.body.velocity.x * 0.016;
+            b.body.y += b.body.body.velocity.y * 0.016;
+        }
+
+        const finalDist = Math.hypot(b.body.x - gs.player.head.x, b.body.y - gs.player.head.y);
+        return { initialDist, finalDist };
+    });
+
+    assert(catchResult.finalDist < catchResult.initialDist, `BI: Player closes distance on Boss over time (${catchResult.initialDist.toFixed(1)} -> ${catchResult.finalDist.toFixed(1)})`);
+
+    // --- Test BJ: OFF-SCREEN INDICATOR (Section 25) ---
+    console.log('\n--- Test BJ: OFF-SCREEN INDICATOR ---');
+    await v5Page.setViewportSize({ width: 1024, height: 768 });
+    await v5Page.waitForTimeout(200);
+
+    await v5Page.evaluate(() => {
+        window.__PHASER_GAME__.scene.stop('PrepScene');
+        window.__PHASER_GAME__.scene.start('GameScene', { levelId: 1 });
+    });
+    await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('GameScene'), { timeout: 10000 });
+
+    // 1. Spawn Boss and place outside camera viewport
+    const bjState1 = await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        gs.stopSpawning();
+        gs.spawnBoss();
+        gs.player.head.setPosition(0, 0);
+        // Off-screen on 1024x768
+        gs.boss.body.setPosition(1000, 0);
+        gs.boss.valueText.setPosition(1000, 0);
+        gs.bossIndicator.update(gs.boss, gs.cameras.main, gs.getObstacleBounds());
+        return gs.bossIndicator.getState();
+    });
+
+    assert(bjState1.visible === true, 'BJ: Boss indicator visible when Boss is off-screen');
+    assert(bjState1.value === 100, `BJ: Displayed Boss value correct (${bjState1.value})`);
+    assert(bjState1.text.includes('100'), `BJ: Displayed text contains '100' (${bjState1.text})`);
+
+    // 2. Move Boss to opposite direction (x: -1000, y: 0)
+    const bjState2 = await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        gs.boss.body.setPosition(-1000, 0);
+        gs.boss.valueText.setPosition(-1000, 0);
+        gs.bossIndicator.update(gs.boss, gs.cameras.main, gs.getObstacleBounds());
+        return gs.bossIndicator.getState();
+    });
+
+    assert(bjState2.visible === true, 'BJ: Boss indicator visible on opposite side');
+    assert(bjState2.x < bjState1.x, `BJ: Indicator changed side/direction towards opposite position (x: ${bjState1.x.toFixed(1)} -> ${bjState2.x.toFixed(1)})`);
+
+    // 3. Move Boss inside current camera viewport (x: 50, y: 50)
+    const bjState3 = await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        gs.boss.body.setPosition(50, 50);
+        gs.boss.valueText.setPosition(50, 50);
+        gs.bossIndicator.update(gs.boss, gs.cameras.main, gs.getObstacleBounds());
+        return gs.bossIndicator.getState();
+    });
+
+    assert(bjState3.visible === false, 'BJ: Indicator hidden when Boss is inside camera viewport');
+
+    // --- Test BK: RESPONSIVE LOCATOR (Section 26) ---
+    console.log('\n--- Test BK: RESPONSIVE LOCATOR ---');
+    for (const [vw, vh] of arenaViewports) {
+        await v5Page.setViewportSize({ width: vw, height: vh });
+        await v5Page.waitForTimeout(300);
+
+        const bkResp = await v5Page.evaluate(() => {
+            const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+            gs.player.head.setPosition(0, 0);
+            gs.boss.body.setPosition(1100, -700);
+            gs.boss.valueText.setPosition(1100, -700);
+            gs.bossIndicator.update(gs.boss, gs.cameras.main, gs.getObstacleBounds());
+
+            const indBounds = gs.bossIndicator.getBounds();
+            const layout = gs.getLayoutBounds();
+            const cam = gs.cameras.main;
+
+            const checkOverlap = (r1, r2) => {
+                if (!r1 || !r2) return false;
+                if (r1.width <= 0 || r1.height <= 0 || r2.width <= 0 || r2.height <= 0) return false;
+                return !(r1.x + r1.width <= r2.x || r2.x + r2.width <= r1.x || r1.y + r1.height <= r2.y || r2.y + r2.height <= r1.y);
+            };
+
+            const insideViewport = (
+                indBounds.x >= 0 &&
+                indBounds.y >= 0 &&
+                indBounds.x + indBounds.width <= cam.width &&
+                indBounds.y + indBounds.height <= cam.height
+            );
+
+            return {
+                visible: gs.bossIndicator.container.visible,
+                insideViewport,
+                indBounds,
+                overlapHP: checkOverlap(indBounds, layout.hp),
+                overlapScore: checkOverlap(indBounds, layout.score),
+                overlapBest: checkOverlap(indBounds, layout.best),
+                overlapMagnetHUD: checkOverlap(indBounds, layout.magnetHUD),
+                overlapBoostBar: checkOverlap(indBounds, layout.boostBar),
+                overlapLeaderboard: checkOverlap(indBounds, layout.leaderboard),
+                overlapJoystick: checkOverlap(indBounds, layout.joystick),
+                overlapBoostBtn: checkOverlap(indBounds, layout.boostButton),
+                overlapMagnetBtn: checkOverlap(indBounds, layout.magnetButton)
+            };
+        });
+
+        assert(bkResp.visible === true, `BK: Indicator visible on ${vw}x${vh}`);
+        assert(bkResp.insideViewport, `BK: Indicator inside viewport on ${vw}x${vh}`);
+        assert(!bkResp.overlapHP, `BK: No overlap with HP on ${vw}x${vh}`);
+        assert(!bkResp.overlapScore, `BK: No overlap with Score on ${vw}x${vh}`);
+        assert(!bkResp.overlapBest, `BK: No overlap with Best on ${vw}x${vh}`);
+        assert(!bkResp.overlapMagnetHUD, `BK: No overlap with MagnetHUD on ${vw}x${vh}`);
+        assert(!bkResp.overlapBoostBar, `BK: No overlap with BoostBar on ${vw}x${vh}`);
+        assert(!bkResp.overlapLeaderboard, `BK: No overlap with Leaderboard on ${vw}x${vh}`);
+        assert(!bkResp.overlapJoystick, `BK: No overlap with Joystick on ${vw}x${vh}`);
+        assert(!bkResp.overlapBoostBtn, `BK: No overlap with BoostButton on ${vw}x${vh}`);
+        assert(!bkResp.overlapMagnetBtn, `BK: No overlap with MagnetButton on ${vw}x${vh}`);
+    }
 
     await v5Context.close();
 

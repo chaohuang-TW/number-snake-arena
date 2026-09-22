@@ -54,6 +54,9 @@ export const GameBalance = {
         value: 100,
         speedMultiplier: 0.6,
         chaseDistance: 2000,
+        boundaryMargin: 100,
+        boundarySteerStrength: 1.8,
+        softZone: 250,
     },
     damage: {
         mildRatioMin: 1.0,

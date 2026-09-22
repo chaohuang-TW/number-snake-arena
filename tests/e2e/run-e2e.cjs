@@ -908,7 +908,12 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
                 }
 
                 // Test input
-                await tPage.evaluate(() => { window.API = window.__NUMBER_SNAKE_DEBUG__; window.API.stopSpawning(); });
+                await tPage.evaluate(() => {
+                    window.API = window.__NUMBER_SNAKE_DEBUG__;
+                    window.API.stopSpawning();
+                    if (window.API.hardReset) window.API.hardReset();
+                    window.API.setPlayerHP(10);
+                });
                 let initialBoost = await tPage.evaluate(() => API.getBoostEnergy());
                 let speedNormal = await tPage.evaluate(() => API.getPlayerSpeed());
                 
@@ -931,6 +936,10 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
                 else console.log(`✅ ASSERT OK: Boost energy should recover`);
 
                 // Joystick E2E
+                await tPage.evaluate(() => {
+                    if (window.API.hardReset) window.API.hardReset();
+                    window.API.setPlayerHP(10);
+                });
                 let jPos1 = await tPage.evaluate(() => API.getPlayerPosition());
                 await tPage.mouse.move(100, v.height - 100);
                 await tPage.mouse.down();
@@ -2743,6 +2752,7 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
 
     // 3. Level Clear REPLAY LEVEL real click (Level 1)
     await v5Page.evaluate(() => {
+        window.__PHASER_GAME__.scene.stop('PrepScene');
         window.__PHASER_GAME__.scene.start('GameScene', { levelId: 1 });
     });
     await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('GameScene'), { timeout: 10000 });
@@ -2779,6 +2789,7 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
     // 4. NEXT LEVEL routing L1 -> L2, L2 -> L3, L3 -> L4 via real clicks
     for (const lvl of [1, 2, 3]) {
         await v5Page.evaluate((l) => {
+            window.__PHASER_GAME__.scene.stop('PrepScene');
             window.__PHASER_GAME__.scene.start('GameScene', { levelId: l });
         }, lvl);
         await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('GameScene'), { timeout: 10000 });
@@ -2818,6 +2829,7 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
 
     // 5. Level 4 PLAY AGAIN real click
     await v5Page.evaluate(() => {
+        window.__PHASER_GAME__.scene.stop('PrepScene');
         window.__PHASER_GAME__.scene.start('GameScene', { levelId: 4 });
     });
     await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('GameScene'), { timeout: 10000 });
@@ -2867,6 +2879,8 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
     // --- Test AX: LIVE LEADERBOARD ---
     console.log('\n--- Test AX: LIVE LEADERBOARD ---');
     await v5Page.evaluate(() => {
+        window.__PHASER_GAME__.scene.stop('MenuScene');
+        window.__PHASER_GAME__.scene.stop('PrepScene');
         window.__PHASER_GAME__.scene.start('GameScene', { levelId: 1, startValueOverride: 5 });
     });
     await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('GameScene'), { timeout: 10000 });
@@ -3174,6 +3188,7 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
 
         // 1. Check PrepScene responsive
         await v5Page.evaluate(() => {
+            window.__PHASER_GAME__.scene.stop('GameScene');
             window.__PHASER_GAME__.scene.start('PrepScene', { levelId: 1 });
         });
         await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('PrepScene'), { timeout: 10000 });
@@ -3191,6 +3206,7 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
 
         // 2. Check GameScene responsive & bounding overlap checks
         await v5Page.evaluate(() => {
+            window.__PHASER_GAME__.scene.stop('PrepScene');
             window.__PHASER_GAME__.scene.start('GameScene', { levelId: 1 });
         });
         await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('GameScene'), { timeout: 10000 });

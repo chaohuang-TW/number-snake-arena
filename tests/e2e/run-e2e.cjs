@@ -1393,7 +1393,7 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
     await adPage.waitForFunction(() => window.__PHASER_GAME__ !== undefined, { timeout: 15000 });
     await adPage.waitForTimeout(500);
     await adPage.evaluate(() => { window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'MenuScene').startGame(2); });
-    await adPage.waitForTimeout(500);
+    await adPage.waitForFunction(() => window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene')?.player?.head, { timeout: 15000 });
     
     let aeInitOk = await adPage.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
@@ -1426,17 +1426,38 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
     await adPage.waitForFunction(() => window.__PHASER_GAME__ !== undefined, { timeout: 15000 });
     await adPage.waitForTimeout(500);
     await adPage.evaluate(() => { window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'MenuScene').startGame(2); });
-    await adPage.waitForTimeout(500);
+    await adPage.waitForFunction(() => window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene')?.player?.head, { timeout: 15000 });
     await adPage.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
         gs.levelClear();
     });
-    await adPage.waitForTimeout(4000);
+    
+    try {
+        await adPage.waitForFunction(() => {
+            const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+            if (!gs) return false;
+            const texts = gs.children.list.filter(c => c.type === 'Text').map(t => t.text);
+            const hasClear = texts.some(t => t.includes('LEVEL 2 CLEAR'));
+            const hasHeart = texts.some(t => t.includes('+1 HEART'));
+            const hasUnlocked = texts.some(t => t.includes('LEVEL 3 UNLOCKED'));
+            const nextBtn = gs.children.list.find(c => c.type === 'Text' && c.text === 'NEXT LEVEL');
+            const hasNext = !!nextBtn && nextBtn.input && nextBtn.input.enabled;
+            return hasClear && hasHeart && hasUnlocked && hasNext;
+        }, { timeout: 15000 });
+    } catch (e) {
+        console.error('Wait for Level 2 Clear UI timed out:', e.message);
+    }
     
     let aeUI = await adPage.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        if (!gs) return { texts: [], nextBtnFound: false, nextBtnInteractive: false };
         const texts = gs.children.list.filter(c => c.type === 'Text').map(t => t.text);
-        return { texts };
+        const nextBtn = gs.children.list.find(c => c.type === 'Text' && c.text === 'NEXT LEVEL');
+        return {
+            texts,
+            nextBtnFound: !!nextBtn,
+            nextBtnInteractive: !!(nextBtn && nextBtn.input && nextBtn.input.enabled)
+        };
     });
     aeProg = await adPage.evaluate(() => JSON.parse(localStorage.getItem('number_snake_progression')));
     
@@ -1446,19 +1467,35 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
     } else {
         console.log('✅ ASSERT OK: L2 Clear granted +1 maxHPBonus and unlocked L3');
     }
+    if (!aeUI.texts.find(t => t.includes('LEVEL 2 CLEAR'))) {
+        console.error('❌ ASSERT FAILED: L2 Clear UI missing LEVEL 2 CLEAR', aeUI.texts);
+        totalErrors++;
+    } else {
+        console.log('✅ ASSERT OK: L2 Clear UI displayed LEVEL 2 CLEAR');
+    }
     if (!aeUI.texts.find(t => t.includes('+1 HEART')) || !aeUI.texts.find(t => t.includes('LEVEL 3 UNLOCKED'))) {
         console.error('❌ ASSERT FAILED: L2 Clear UI missing elements', aeUI.texts);
         totalErrors++;
     } else {
         console.log('✅ ASSERT OK: L2 Clear UI displayed +1 HEART and LEVEL 3 UNLOCKED');
     }
+    if (!aeUI.nextBtnFound || !aeUI.nextBtnInteractive) {
+        console.error('❌ ASSERT FAILED: NEXT LEVEL button is missing or not interactive');
+        totalErrors++;
+    } else {
+        console.log('✅ ASSERT OK: NEXT LEVEL button exists and is interactive');
+    }
 
     // Click NEXT LEVEL to test transition
-    await adPage.evaluate(() => {
-        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
-        const nextBtn = gs.children.list.find(c => c.type === 'Text' && c.text === 'NEXT LEVEL');
-        nextBtn.emit('pointerdown');
-    });
+    if (aeUI.nextBtnFound) {
+        await adPage.evaluate(() => {
+            const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+            const nextBtn = gs ? gs.children.list.find(c => c.type === 'Text' && c.text === 'NEXT LEVEL') : null;
+            if (nextBtn) nextBtn.emit('pointerdown');
+        });
+    } else {
+        console.error('❌ ASSERT FAILED: Cannot click NEXT LEVEL because it was not found');
+    }
     await adPage.waitForTimeout(1000);
     let agInit = await adPage.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
@@ -2016,63 +2053,129 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
 
     // --- Test AP: MAGNET STRICT ELIGIBILITY ---
     console.log('\n--- Test AP: MAGNET STRICT ELIGIBILITY ---');
-    const magnetEligibility = await evoPage.evaluate(() => {
+    await evoPage.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
         gs.stopSpawning();
         for (const e of gs.enemies) e.destroy();
         gs.enemies = [];
         if (gs.boss) { gs.boss.destroy(); gs.boss = null; gs.bossSpawned = false; }
+        for (const o of gs.orbs) o.destroy();
+        gs.orbs = [];
 
+        // Deterministically freeze player at (0, 0)
         gs.player.head.setPosition(0, 0);
         gs.player.value = 10;
+        gs.player.isStunned = true;
         gs.player.head.setVelocity(0, 0);
 
-        // 1. Smaller enemy inside radius (200px) -> Value 5
+        // 1. Smaller enemy inside radius (230px) -> Value 5
         const eSmallerInside = gs.spawnEnemy();
         eSmallerInside.value = 5;
-        eSmallerInside.body.setPosition(200, 0);
+        eSmallerInside.__testId = 'smallerInside';
+        eSmallerInside.body.setPosition(230, 0);
         eSmallerInside.body.setVelocity(0, 0);
 
         // 2. Equal enemy inside radius (200px) -> Value 10
         const eEqualInside = gs.spawnEnemy();
         eEqualInside.value = 10;
+        eEqualInside.__testId = 'equalInside';
         eEqualInside.body.setPosition(0, 200);
         eEqualInside.body.setVelocity(0, 0);
 
-        // 3. Larger enemy inside radius (200px) -> Value 15
+        // 3. Larger enemy inside radius (200px) -> Value 11
         const eLargerInside = gs.spawnEnemy();
-        eLargerInside.value = 15;
+        eLargerInside.value = 11;
+        eLargerInside.__testId = 'largerInside';
         eLargerInside.body.setPosition(-200, 0);
         eLargerInside.body.setVelocity(0, 0);
 
         // 4. Smaller enemy outside radius (300px) -> Value 5
         const eSmallerOutside = gs.spawnEnemy();
         eSmallerOutside.value = 5;
+        eSmallerOutside.__testId = 'smallerOutside';
         eSmallerOutside.body.setPosition(300, 0);
         eSmallerOutside.body.setVelocity(0, 0);
 
-        gs.activateMagnet();
-        gs.magnet.update(100, gs.player.head.x, gs.player.head.y, gs.player.value, gs.enemies, gs.orbs);
+        // 5. Boss inside radius (200px) -> Value 100
+        gs.spawnBoss();
+        if (gs.boss) {
+            gs.boss.body.setPosition(0, -200);
+            gs.boss.body.setVelocity(0, 0);
+        }
 
-        const smallerInsidePulled = eSmallerInside.body.body.velocity.x < -100;
-        const equalInsidePulled = eEqualInside.body.body.velocity.y < -100;
-        const largerInsidePulled = eLargerInside.body.body.velocity.x > 100;
-        const smallerOutsidePulled = eSmallerOutside.body.body.velocity.x < -100;
+        gs.activateMagnet();
+    });
+
+    const prePositions = await evoPage.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        const px = gs.player.head.x;
+        const py = gs.player.head.y;
+        const eSmaller = gs.enemies.find(e => e.__testId === 'smallerInside');
+        const eEqual = gs.enemies.find(e => e.__testId === 'equalInside');
+        const eLarger = gs.enemies.find(e => e.__testId === 'largerInside');
+        const eOutside = gs.enemies.find(e => e.__testId === 'smallerOutside');
 
         return {
-            smallerInsidePulled,
-            equalInsidePulled,
-            largerInsidePulled,
-            smallerOutsidePulled,
+            distSmaller: eSmaller ? Math.hypot(px - eSmaller.body.x, py - eSmaller.body.y) : null,
+            distEqual: eEqual ? Math.hypot(px - eEqual.body.x, py - eEqual.body.y) : null,
+            distLarger: eLarger ? Math.hypot(px - eLarger.body.x, py - eLarger.body.y) : null,
+            distOutside: eOutside ? Math.hypot(px - eOutside.body.x, py - eOutside.body.y) : null,
+            distBoss: gs.boss ? Math.hypot(px - gs.boss.body.x, py - gs.boss.body.y) : null,
             magnetState: gs.magnet.state
         };
     });
 
-    assert(magnetEligibility.magnetState === 'ACTIVE', 'Magnet is ACTIVE');
-    assert(magnetEligibility.smallerInsidePulled, 'Smaller enemy inside 200px pulled toward player');
-    assert(!magnetEligibility.equalInsidePulled, 'Equal enemy inside 200px is NOT magnet pulled');
-    assert(!magnetEligibility.largerInsidePulled, 'Larger enemy inside 200px is NOT magnet pulled');
-    assert(!magnetEligibility.smallerOutsidePulled, 'Smaller enemy outside 300px is NOT magnet pulled');
+    // Run across real game frames under active magnet (180ms is ~68px pull travel at 380px/s)
+    await evoPage.waitForTimeout(180);
+
+    const postEvaluation = await evoPage.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        gs.player.head.setVelocity(0, 0);
+
+        const px = gs.player.head.x;
+        const py = gs.player.head.y;
+        const eSmaller = gs.enemies.find(e => e.__testId === 'smallerInside');
+        const eEqual = gs.enemies.find(e => e.__testId === 'equalInside');
+        const eLarger = gs.enemies.find(e => e.__testId === 'largerInside');
+        const eOutside = gs.enemies.find(e => e.__testId === 'smallerOutside');
+
+        const distSmaller = eSmaller ? Math.hypot(px - eSmaller.body.x, py - eSmaller.body.y) : null;
+        const distEqual = eEqual ? Math.hypot(px - eEqual.body.x, py - eEqual.body.y) : null;
+        const distLarger = eLarger ? Math.hypot(px - eLarger.body.x, py - eLarger.body.y) : null;
+        const distOutside = eOutside ? Math.hypot(px - eOutside.body.x, py - eOutside.body.y) : null;
+        const distBoss = gs.boss ? Math.hypot(px - gs.boss.body.x, py - gs.boss.body.y) : null;
+
+        // Magnet pull sets velocity to pullSpeed (380 px/s); normal AI never reaches 300 px/s
+        const smallerPulled = eSmaller && Math.hypot(eSmaller.body.body.velocity.x, eSmaller.body.body.velocity.y) > 300;
+        const equalPulled = eEqual && Math.hypot(eEqual.body.body.velocity.x, eEqual.body.body.velocity.y) > 300;
+        const largerPulled = eLarger && Math.hypot(eLarger.body.body.velocity.x, eLarger.body.body.velocity.y) > 300;
+        const outsidePulled = eOutside && Math.hypot(eOutside.body.body.velocity.x, eOutside.body.body.velocity.y) > 300;
+        const bossPulled = gs.boss && Math.hypot(gs.boss.body.body.velocity.x, gs.boss.body.body.velocity.y) > 300;
+
+        return {
+            distSmaller,
+            distEqual,
+            distLarger,
+            distOutside,
+            distBoss,
+            smallerPulled,
+            equalPulled,
+            largerPulled,
+            outsidePulled,
+            bossPulled,
+            magnetState: gs.magnet.state
+        };
+    });
+
+    assert(prePositions.magnetState === 'ACTIVE', 'Magnet is ACTIVE');
+    const distSmallerValid = postEvaluation.distSmaller !== null && prePositions.distSmaller !== null;
+    assert(distSmallerValid && postEvaluation.distSmaller < prePositions.distSmaller - 20,
+        `Smaller enemy inside 200px is pulled toward player across real frames (before: ${prePositions.distSmaller ? prePositions.distSmaller.toFixed(1) : 'null'}, after: ${postEvaluation.distSmaller ? postEvaluation.distSmaller.toFixed(1) : 'null'})`);
+    assert(postEvaluation.smallerPulled, 'Smaller enemy has magnet pull velocity');
+    assert(!postEvaluation.equalPulled, 'Equal enemy inside 200px is NOT magnet pulled');
+    assert(!postEvaluation.largerPulled, 'Larger enemy inside 200px is NOT magnet pulled');
+    assert(!postEvaluation.outsidePulled, 'Smaller enemy outside 300px is NOT magnet pulled');
+    assert(!postEvaluation.bossPulled, 'Boss is NOT magnet pulled');
 
     // --- Test AQ: MAGNET ACTIVE / COOLDOWN ---
     console.log('\n--- Test AQ: MAGNET ACTIVE / COOLDOWN ---');
@@ -2192,15 +2295,27 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
     assert(tapped.magnetState === 'ACTIVE', 'Tapping mobile MAGNET button activates ability');
     assert(tapped.hudText.includes('MAGNET'), 'HUD shows active countdown after tap');
 
-    // --- Test AS: HEAD EAT → BODY ORBS ---
-    console.log('\n--- Test AS: HEAD EAT → BODY ORBS ---');
+    // --- Test AS: HEAD EAT → BODY ORBS & PRODUCTION ORB COLLECTION ---
+    console.log('\n--- Test AS: HEAD EAT → BODY ORBS & PRODUCTION ORB COLLECTION ---');
     const eatOrbResults = await evoPage.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
         gs.hardReset();
+        gs.gameState = 'RUNNING';
+        gs.stopSpawning();
+        for (const e of gs.enemies) e.destroy();
+        gs.enemies = [];
+        if (gs.boss) { gs.boss.destroy(); gs.boss = null; gs.bossSpawned = false; }
+        for (const o of gs.orbs) o.destroy();
+        gs.orbs = [];
+
+        gs.player.head.setPosition(0, 0);
         gs.player.value = 10;
         gs.player.hp = 3;
         gs.player.boostEnergy = 50;
+        gs.player.isStunned = true;
+        gs.player.head.setVelocity(0, 0);
 
+        // 1. Eat edible enemy (value 5) via head collision
         const edibleEnemy = gs.spawnEnemy();
         edibleEnemy.value = 5;
         edibleEnemy.body.setPosition(gs.player.head.x, gs.player.head.y);
@@ -2208,55 +2323,144 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
         gs.handleEnemyCollision(edibleEnemy, gs.enemies.indexOf(edibleEnemy), gs.time.now);
 
         const playerValAfterEat = gs.player.value;
-        const orbCount = gs.orbs.length;
-
+        const orbCountAfterEat = gs.orbs.length;
         const scoreAfterEat = gs.hud.getScore();
         const boostAfterEat = gs.player.boostEnergy;
 
-        for (let i = gs.orbs.length - 1; i >= 0; i--) {
-            const orb = gs.orbs[i];
-            orb.destroy();
-            gs.orbs.splice(i, 1);
-            gs.hud.addScore(10);
-            gs.player.boostEnergy = Math.min(100, gs.player.boostEnergy + 2);
-        }
+        // 2. Real Production Orb Collection via gs.update() overlap path
+        // Place first spawned orb inside collection radius (< 32px)
+        const orbToCollect = gs.orbs[0];
+        gs.tweens.killTweensOf(orbToCollect.sprite);
+        orbToCollect.sprite.setPosition(gs.player.head.x, gs.player.head.y);
+        orbToCollect.baseY = gs.player.head.y;
+
+        // Execute production GameScene update step (no manual addScore / boost injection)
+        gs.update(gs.time.now, 16);
 
         const playerValAfterOrbs = gs.player.value;
         const playerHpAfterOrbs = gs.player.hp;
         const scoreAfterOrbs = gs.hud.getScore();
         const boostAfterOrbs = gs.player.boostEnergy;
+        const orbCountAfterCollect = gs.orbs.length;
 
+        // Clean up remaining orbs from eat test
+        for (const o of gs.orbs) o.destroy();
+        gs.orbs = [];
+
+        // 3. Collision Regression: Equal value (15 vs 15) -> Damage, no orbs
         const equalEnemy = gs.spawnEnemy();
         equalEnemy.value = 15;
+        equalEnemy.body.setPosition(gs.player.head.x, gs.player.head.y);
+        const orbsBeforeEqual = gs.orbs.length;
         gs.handleEnemyCollision(equalEnemy, gs.enemies.indexOf(equalEnemy), gs.time.now);
         const orbsAfterEqual = gs.orbs.length;
 
+        // 4. Collision Regression: Larger value (25 vs 15) -> Damage, no orbs
         gs.player.isInvulnerable = false;
         const largerEnemy = gs.spawnEnemy();
         largerEnemy.value = 25;
+        largerEnemy.body.setPosition(gs.player.head.x, gs.player.head.y);
+        const orbsBeforeLarger = gs.orbs.length;
         gs.handleEnemyCollision(largerEnemy, gs.enemies.indexOf(largerEnemy), gs.time.now);
         const orbsAfterLarger = gs.orbs.length;
 
         return {
             playerValAfterEat,
-            orbCount,
+            orbCountAfterEat,
+            orbCountAfterCollect,
             playerValAfterOrbs,
             playerHpAfterOrbs,
-            scoreIncreased: scoreAfterOrbs > scoreAfterEat,
-            boostIncreased: boostAfterOrbs > boostAfterEat,
+            scoreAfterEat,
+            scoreAfterOrbs,
+            boostAfterEat,
+            boostAfterOrbs,
+            orbsBeforeEqual,
             orbsAfterEqual,
+            orbsBeforeLarger,
             orbsAfterLarger
         };
     });
 
     assert(eatOrbResults.playerValAfterEat === 15, `Player Value after eating 5 is 15, got ${eatOrbResults.playerValAfterEat}`);
-    assert(eatOrbResults.orbCount >= 1, `Body orbs created after eat, got ${eatOrbResults.orbCount}`);
+    assert(eatOrbResults.orbCountAfterEat >= 1, `Body orbs created after eat, got ${eatOrbResults.orbCountAfterEat}`);
+    assert(eatOrbResults.orbCountAfterCollect === eatOrbResults.orbCountAfterEat - 1, 'Orb collected and removed via production update path');
+    assert(eatOrbResults.scoreAfterOrbs === eatOrbResults.scoreAfterEat + 10, 'Score increases by exactly +10 via production orb collection');
+    assert(eatOrbResults.boostAfterOrbs === eatOrbResults.boostAfterEat + 2, 'Boost increases by exactly +2 via production orb collection');
     assert(eatOrbResults.playerValAfterOrbs === 15, `Player Value remains 15 after collecting orbs, got ${eatOrbResults.playerValAfterOrbs}`);
     assert(eatOrbResults.playerHpAfterOrbs === 3, `Player HP remains 3 after collecting orbs, got ${eatOrbResults.playerHpAfterOrbs}`);
-    assert(eatOrbResults.scoreIncreased, 'Score increases from collecting body orbs (+10 each)');
-    assert(eatOrbResults.boostIncreased, 'Boost increases from collecting body orbs (+2 each)');
-    assert(eatOrbResults.orbsAfterEqual === 0, 'No body orbs created from equal-value collision damage');
-    assert(eatOrbResults.orbsAfterLarger === 0, 'No body orbs created from larger-value collision damage');
+    assert(eatOrbResults.orbsAfterEqual === eatOrbResults.orbsBeforeEqual, 'No body orbs created from equal-value collision damage');
+    assert(eatOrbResults.orbsAfterLarger === eatOrbResults.orbsBeforeLarger, 'No body orbs created from larger-value collision damage');
+
+    // --- Test AS.2: MAGNET + ORB REAL-FRAME PULL & COLLECTION ---
+    console.log('\n--- Test AS.2: MAGNET + ORB REAL-FRAME PULL & COLLECTION ---');
+    const magnetOrbInit = await evoPage.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        gs.hardReset();
+        gs.gameState = 'RUNNING';
+        gs.stopSpawning();
+        for (const e of gs.enemies) e.destroy();
+        gs.enemies = [];
+        if (gs.boss) { gs.boss.destroy(); gs.boss = null; gs.bossSpawned = false; }
+        for (const o of gs.orbs) o.destroy();
+        gs.orbs = [];
+
+        gs.player.head.setPosition(0, 0);
+        gs.player.value = 15;
+        gs.player.hp = 3;
+        gs.player.boostEnergy = 50;
+        gs.player.isStunned = true;
+        gs.player.head.setVelocity(0, 0);
+
+        // Spawn a loose collectible orb at (200, 0)
+        const orb = gs.spawnOrb(200, 0);
+        orb.__testId = 'magnetOrb';
+        gs.tweens.killTweensOf(orb.sprite);
+        orb.sprite.setPosition(200, 0);
+        orb.baseY = 0;
+        orb.sprite.setScale(1);
+
+        const scoreBefore = gs.hud.getScore();
+        const boostBefore = gs.player.boostEnergy;
+        const initialDist = Math.hypot(gs.player.head.x - orb.sprite.x, gs.player.head.y - orb.sprite.y);
+
+        gs.activateMagnet();
+
+        return { scoreBefore, boostBefore, initialDist };
+    });
+
+    assert(magnetOrbInit.initialDist >= 190, `Initial orb distance is ~200px, got ${magnetOrbInit.initialDist}`);
+
+    // Wait real game frames for magnet to pull orb toward player
+    await evoPage.waitForTimeout(300);
+
+    const midPullCheck = await evoPage.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        gs.player.head.setVelocity(0, 0);
+        const orb = gs.orbs.find(o => o.__testId === 'magnetOrb');
+        if (!orb || orb.isCollected) return { collectedEarly: true, midDist: 0 };
+        const midDist = Math.hypot(gs.player.head.x - orb.sprite.x, gs.player.head.y - orb.sprite.y);
+        return { collectedEarly: false, midDist };
+    });
+
+    assert(midPullCheck.collectedEarly || midPullCheck.midDist < magnetOrbInit.initialDist - 30,
+        `Loose orb at ~200px moved closer under magnet across real frames (midDist: ${midPullCheck.midDist.toFixed(1)})`);
+
+    // Wait another 550ms for orb to enter < 32px collection radius and get consumed by production update
+    await evoPage.waitForTimeout(550);
+
+    const postPullCheck = await evoPage.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        const orb = gs.orbs.find(o => o.__testId === 'magnetOrb');
+        return {
+            orbConsumed: !orb || orb.isCollected,
+            finalScore: gs.hud.getScore(),
+            finalBoost: gs.player.boostEnergy
+        };
+    });
+
+    assert(postPullCheck.orbConsumed, 'Loose orb was pulled into collection radius and consumed via production path');
+    assert(postPullCheck.finalScore >= magnetOrbInit.scoreBefore + 10, 'Score increased from magnet orb collection (+10)');
+    assert(postPullCheck.finalBoost >= magnetOrbInit.boostBefore + 2, 'Boost increased from magnet orb collection (+2)');
 
     // --- Test AT: BACKGROUND THEMES ---
     console.log('\n--- Test AT: BACKGROUND THEMES ---');

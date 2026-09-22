@@ -338,7 +338,12 @@ export class GameScene extends Phaser.Scene {
         }
         this.player.update(dt, isBoosting);
 
-        // Magnet desktop trigger & update
+        // Update AI enemies normal movement first
+        for (const e of this.enemies) {
+            e.update(dt, this.player.head.x, this.player.head.y, this.player.value);
+        }
+
+        // Magnet desktop trigger & update (Applied AFTER normal AI velocity so magnetic pull survives)
         if (Phaser.Input.Keyboard.JustDown(this.keys.m)) {
             this.activateMagnet();
         }
@@ -356,11 +361,13 @@ export class GameScene extends Phaser.Scene {
             // Head overlap collects orb
             const dist = Phaser.Math.Distance.Between(this.player.head.x, this.player.head.y, orb.sprite.x, orb.sprite.y);
             if (dist < 32) {
+                const ox = orb.sprite.x;
+                const oy = orb.sprite.y;
                 orb.destroy();
                 this.orbs.splice(i, 1);
                 this.hud.addScore(GameBalance.orb.scoreReward);
                 this.player.boostEnergy = Math.min(GameBalance.player.maxBoostEnergy, this.player.boostEnergy + GameBalance.orb.boostReward);
-                this.createParticles(orb.sprite.x, orb.sprite.y, 0xffff00, 6);
+                this.createParticles(ox, oy, 0xffff00, 6);
             }
         }
 
@@ -401,10 +408,9 @@ export class GameScene extends Phaser.Scene {
             }
         }
 
+        // Enemy Collision & Eat Assist
         for (let i = this.enemies.length - 1; i >= 0; i--) {
             const e = this.enemies[i];
-            e.update(dt, this.player.head.x, this.player.head.y, this.player.value);
-            
             let isHit = this.physics.overlap(this.player.head, e.body);
             
             // Eat Assist
@@ -459,6 +465,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     hardReset() {
+        this.gameState = 'RUNNING';
         this.player.value = this.levelDef.startValue;
         this.player.hp = ProgressionManager.getMaxHP();
         this.player.segments = 5;
@@ -475,6 +482,8 @@ export class GameScene extends Phaser.Scene {
 
     stopSpawning() {
         this.spawnTimer = 9999999;
+        this.lastEdibleCheckTime = 999999999;
+        this.lastRescueTime = 999999999;
         for (const e of this.enemies) { e.destroy(); }
         this.enemies = [];
     }
@@ -577,6 +586,16 @@ export class GameScene extends Phaser.Scene {
         return enemy;
     }
 
+    spawnOrb(x: number, y: number): CollectibleOrb {
+        if (this.orbs.length >= GameBalance.orb.maxActive) {
+            const oldest = this.orbs.shift();
+            oldest?.destroy();
+        }
+        const orb = new CollectibleOrb(this, x, y);
+        this.orbs.push(orb);
+        return orb;
+    }
+
     spawnBoss() {
         this.bossSpawned = true;
         
@@ -635,11 +654,7 @@ export class GameScene extends Phaser.Scene {
             // Spawn body orbs from former body positions
             const dropPositions = e.getDropPositions();
             for (const pos of dropPositions) {
-                if (this.orbs.length >= GameBalance.orb.maxActive) {
-                    const oldest = this.orbs.shift();
-                    oldest?.destroy();
-                }
-                this.orbs.push(new CollectibleOrb(this, pos.x, pos.y));
+                this.spawnOrb(pos.x, pos.y);
             }
 
             const oldVal = this.player.value - e.value;

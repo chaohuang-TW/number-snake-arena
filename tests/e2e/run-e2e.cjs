@@ -2501,6 +2501,542 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
 
     await anContext.close();
 
+    // ==========================================
+    // v0.5.0: ARENA & PROGRESSION TESTS (AU - BB)
+    // ==========================================
+    const v5Context = await browser.newContext({
+        viewport: { width: 1024, height: 768 }
+    });
+    const v5Page = await v5Context.newPage();
+    const v5Url = baseURL + (baseURL.includes('?') ? '&' : '?') + 'debug=1';
+    await v5Page.goto(v5Url);
+
+    // --- Test AU: PRE-BATTLE UI ---
+    console.log('\n--- Test AU: PRE-BATTLE UI ---');
+    await v5Page.evaluate(() => {
+        localStorage.clear();
+        window.__PHASER_GAME__.scene.start('MenuScene');
+    });
+    await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('MenuScene'), { timeout: 10000 });
+    
+    // Open PrepScene via Menu Level 1 card START button
+    await v5Page.evaluate(() => {
+        const ms = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'MenuScene');
+        ms.openPrep(1);
+    });
+    await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('PrepScene'), { timeout: 10000 });
+
+    const prepUI = await v5Page.evaluate(() => {
+        const ps = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
+        return {
+            title: ps.titleText ? ps.titleText.text : '',
+            levelSub: ps.levelSubText ? ps.levelSubText.text : '',
+            heading: ps.startValueHeading ? ps.startValueHeading.text : '',
+            selectedVal: ps.getSelectedStartValue(),
+            cardCount: ps.cardContainers ? ps.cardContainers.length : 0,
+            hasStartBtn: !!ps.startLevelBtnText,
+            hasBackBtn: !!ps.backBtnText
+        };
+    });
+
+    assert(prepUI.title === 'PRE-BATTLE', `Title is PRE-BATTLE, got ${prepUI.title}`);
+    assert(prepUI.levelSub.includes('1') || prepUI.levelSub.includes('LEVEL 1'), `Subtitle indicates Level 1, got ${prepUI.levelSub}`);
+    assert(prepUI.heading === 'START VALUE', `Heading is START VALUE, got ${prepUI.heading}`);
+    assert(prepUI.selectedVal === 5, `Default selected start value is 5, got ${prepUI.selectedVal}`);
+    assert(prepUI.cardCount === 3, `Exactly 3 start value cards exist, got ${prepUI.cardCount}`);
+    assert(prepUI.hasStartBtn, 'START LEVEL button exists in PrepScene');
+    assert(prepUI.hasBackBtn, 'BACK button exists in PrepScene');
+
+    // --- Test AV: REAL START VALUE ---
+    console.log('\n--- Test AV: REAL START VALUE ---');
+    // 1. Select 5 -> Start
+    await v5Page.evaluate(() => {
+        const ps = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
+        ps.selectStartValue(5);
+        ps.startLevel();
+    });
+    await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('GameScene'), { timeout: 10000 });
+    const runVal5 = await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return {
+            val: gs.player.value,
+            seg: gs.player.segments,
+            boost: gs.player.boostEnergy,
+            hp: gs.player.hp,
+            levelDefStartVal: gs.levelDef.startValue
+        };
+    });
+    assert(runVal5.val === 5, `Player start value 5 applied, got ${runVal5.val}`);
+    assert(runVal5.seg === 5, `Player segments remain 5, got ${runVal5.seg}`);
+    assert(runVal5.boost === 100, `Player boost remains 100, got ${runVal5.boost}`);
+    assert(runVal5.hp === 3, `Player HP unchanged (3), got ${runVal5.hp}`);
+    assert(runVal5.levelDefStartVal === 5, `LEVELS[1].startValue remains canonical 5`);
+
+    // 2. Return Prep -> Select 7 -> Start
+    await v5Page.evaluate(() => {
+        window.__PHASER_GAME__.scene.stop('GameScene');
+        window.__PHASER_GAME__.scene.start('PrepScene', { levelId: 1 });
+    });
+    await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('PrepScene'), { timeout: 10000 });
+    await v5Page.evaluate(() => {
+        const ps = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
+        ps.selectStartValue(7);
+        ps.startLevel();
+    });
+    await v5Page.waitForFunction(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return gs && window.__PHASER_GAME__.scene.isActive('GameScene') && gs.runStartValue === 7;
+    }, { timeout: 10000 });
+    const runVal7 = await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return { val: gs.player.value, seg: gs.player.segments, boost: gs.player.boostEnergy };
+    });
+    assert(runVal7.val === 7, `Player start value 7 applied, got ${runVal7.val}`);
+    assert(runVal7.seg === 5, `Segments remain 5 with start value 7`);
+    assert(runVal7.boost === 100, `Boost remains 100 with start value 7`);
+
+    // 3. Return Prep -> Select 10 -> Start
+    await v5Page.evaluate(() => {
+        window.__PHASER_GAME__.scene.stop('GameScene');
+        window.__PHASER_GAME__.scene.start('PrepScene', { levelId: 1 });
+    });
+    await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('PrepScene'), { timeout: 10000 });
+    await v5Page.evaluate(() => {
+        const ps = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
+        ps.selectStartValue(10);
+        ps.startLevel();
+    });
+    await v5Page.waitForFunction(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return gs && window.__PHASER_GAME__.scene.isActive('GameScene') && gs.runStartValue === 10;
+    }, { timeout: 10000 });
+    const runVal10 = await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return { val: gs.player.value, seg: gs.player.segments, boost: gs.player.boostEnergy };
+    });
+    assert(runVal10.val === 10, `Player start value 10 applied, got ${runVal10.val}`);
+
+    // Hard reset during run should reset to runStartValue (10)
+    await v5Page.evaluate(() => {
+        window.__NUMBER_SNAKE_DEBUG__.hardReset();
+    });
+    const resetVal = await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return gs.player.value;
+    });
+    assert(resetVal === 10, `hardReset resets to runStartValue (10), got ${resetVal}`);
+
+    // --- Test AW: PREP ROUTING ---
+    console.log('\n--- Test AW: PREP ROUTING ---');
+    // 1. Game Over -> PLAY AGAIN -> PrepScene current level
+    await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        gs.gameOver();
+    });
+    await v5Page.waitForTimeout(200);
+    await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        gs.scene.start('PrepScene', { levelId: gs.levelId });
+    });
+    await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('PrepScene'), { timeout: 10000 });
+    let currentPrepLvl = await v5Page.evaluate(() => {
+        const ps = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
+        return ps.levelId;
+    });
+    assert(currentPrepLvl === 1, `Game Over PLAY AGAIN routed to PrepScene Level 1`);
+
+    // 2. Unlock all levels for routing test
+    await v5Page.evaluate(() => {
+        const { ProgressionManager } = window;
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene') ||
+                   window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'MenuScene');
+        for (let l = 1; l <= 4; l++) {
+            // Unlock level 4
+            const prog = JSON.parse(localStorage.getItem('number_snake_progression') || '{}');
+            prog.highestUnlockedLevel = 4;
+            localStorage.setItem('number_snake_progression', JSON.stringify(prog));
+        }
+    });
+
+    // 3. Routing L1 -> L2 -> L3 -> L4 -> Play Again L4
+    for (const lvl of [1, 2, 3]) {
+        await v5Page.evaluate((l) => {
+            window.__PHASER_GAME__.scene.start('PrepScene', { levelId: l + 1 });
+        }, lvl);
+        await v5Page.waitForFunction((l) => {
+            const ps = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
+            return ps && ps.levelId === l + 1;
+        }, lvl, { timeout: 10000 });
+        const nextLvl = await v5Page.evaluate(() => {
+            const ps = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
+            return ps.levelId;
+        });
+        assert(nextLvl === lvl + 1, `NEXT LEVEL routed to PrepScene Level ${lvl + 1}`);
+    }
+
+    // L4 PLAY AGAIN routes to PrepScene Level 4
+    await v5Page.evaluate(() => {
+        window.__PHASER_GAME__.scene.start('PrepScene', { levelId: 4 });
+    });
+    await v5Page.waitForFunction(() => {
+        const ps = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
+        return ps && ps.levelId === 4;
+    }, { timeout: 10000 });
+    const l4Prep = await v5Page.evaluate(() => {
+        const ps = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
+        return ps.levelId;
+    });
+    assert(l4Prep === 4, `Level 4 PLAY AGAIN routes to PrepScene Level 4`);
+
+    // Locked level rejection: Attempting PrepScene level 4 when unlocked=1 must reject to MenuScene
+    await v5Page.evaluate(() => {
+        const prog = JSON.parse(localStorage.getItem('number_snake_progression') || '{}');
+        prog.highestUnlockedLevel = 1;
+        localStorage.setItem('number_snake_progression', JSON.stringify(prog));
+        window.__PHASER_GAME__.scene.start('PrepScene', { levelId: 4 });
+    });
+    await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('MenuScene'), { timeout: 10000 });
+    assert(true, 'PrepScene rejects locked level and returns to MenuScene');
+
+    // --- Test AX: LIVE LEADERBOARD ---
+    console.log('\n--- Test AX: LIVE LEADERBOARD ---');
+    await v5Page.evaluate(() => {
+        window.__PHASER_GAME__.scene.start('GameScene', { levelId: 1, startValueOverride: 5 });
+    });
+    await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('GameScene'), { timeout: 10000 });
+    await v5Page.waitForTimeout(300);
+
+    // Setup deterministic participants: Player 50, NOVA 70, BYTE 60, VOLT 40, PIXEL 30, COMET 20
+    await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        gs.stopSpawning();
+        gs.player.value = 50;
+        
+        // Spawn 5 specific enemies
+        const e1 = gs.spawnOrb ? gs.spawnEnemy(70) : new (gs.enemies[0]?.constructor || Object)(gs, 100, 100, 70);
+        const e2 = gs.spawnEnemy(60);
+        const e3 = gs.spawnEnemy(40);
+        const e4 = gs.spawnEnemy(30);
+        const e5 = gs.spawnEnemy(20);
+
+        gs.enemies = [e1, e2, e3, e4, e5];
+        gs.enemies[0].arenaId = 'enemy_01'; gs.enemies[0].arenaName = 'NOVA'; gs.enemies[0].value = 70;
+        gs.enemies[1].arenaId = 'enemy_02'; gs.enemies[1].arenaName = 'BYTE'; gs.enemies[1].value = 60;
+        gs.enemies[2].arenaId = 'enemy_03'; gs.enemies[2].arenaName = 'VOLT'; gs.enemies[2].value = 40;
+        gs.enemies[3].arenaId = 'enemy_04'; gs.enemies[3].arenaName = 'PIXEL'; gs.enemies[3].value = 30;
+        gs.enemies[4].arenaId = 'enemy_05'; gs.enemies[4].arenaName = 'COMET'; gs.enemies[4].value = 20;
+
+        gs.updateArenaRanking();
+    });
+
+    const lbState = await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return {
+            top5Names: gs.currentRanking.top5.map(p => p.name),
+            top5Values: gs.currentRanking.top5.map(p => p.value),
+            playerRank: gs.currentRanking.playerRank ? gs.currentRanking.playerRank.rank : null,
+            totalCount: gs.currentRanking.all.length
+        };
+    });
+
+    assert(lbState.top5Names[0] === 'NOVA' && lbState.top5Values[0] === 70, `1st is NOVA (70)`);
+    assert(lbState.top5Names[1] === 'BYTE' && lbState.top5Values[1] === 60, `2nd is BYTE (60)`);
+    assert(lbState.top5Names[2] === 'YOU' && lbState.top5Values[2] === 50, `3rd is YOU (50)`);
+    assert(lbState.top5Names[3] === 'VOLT' && lbState.top5Values[3] === 40, `4th is VOLT (40)`);
+    assert(lbState.top5Names[4] === 'PIXEL' && lbState.top5Values[4] === 30, `5th is PIXEL (30)`);
+    assert(!lbState.top5Names.includes('COMET'), 'COMET (20) is excluded from Top 5');
+    assert(lbState.playerRank === 3, `Player rank is correctly 3, got ${lbState.playerRank}`);
+
+    // --- Test AY: GOLD CROWN TRANSFER ---
+    console.log('\n--- Test AY: GOLD CROWN TRANSFER ---');
+    // AI NOVA 70 is rank 1, check world crown follows NOVA
+    const crown1 = await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        const nova = gs.enemies[0];
+        return {
+            leaderId: gs.currentRanking.leader ? gs.currentRanking.leader.id : null,
+            crownVisible: gs.worldCrown.visible,
+            crownY: gs.worldCrown.y,
+            leaderY: nova.body.y
+        };
+    });
+    assert(crown1.leaderId === 'enemy_01', `NOVA holds #1 rank`);
+    assert(crown1.crownVisible, 'World crown is visible on arena leader');
+
+    // Transfer: Increase Player value to 80 -> Player becomes #1
+    await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        gs.bossSpawned = true; // Prevent automatic boss spawn at 70 so pure player-AI crown transfer is tested
+        gs.boss = null;
+        gs.player.value = 80;
+        gs.updateArenaRanking();
+    });
+
+    const crown2 = await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return {
+            leaderId: gs.currentRanking.leader ? gs.currentRanking.leader.id : null,
+            crownVisible: gs.worldCrown.visible,
+            crownY: gs.worldCrown.y,
+            playerY: gs.player.head.y
+        };
+    });
+    assert(crown2.leaderId === 'player', `Player becomes #1 upon reaching 80`);
+    assert(crown2.crownVisible, 'World crown transferred to player');
+
+    // Destroy former leader (NOVA) -> crown remains cleanly on Player without error
+    await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        gs.bossSpawned = true;
+        gs.boss = null;
+        gs.enemies[0].destroy();
+        gs.enemies.shift();
+        gs.updateArenaRanking();
+    });
+    const crown3 = await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return {
+            leaderId: gs.currentRanking.leader ? gs.currentRanking.leader.id : null,
+            crownVisible: gs.worldCrown.visible
+        };
+    });
+    assert(crown3.leaderId === 'player' && crown3.crownVisible, 'Crown remains on Player with no orphan crown error');
+
+    // --- Test AZ: BOSS RANKING ---
+    console.log('\n--- Test AZ: BOSS RANKING ---');
+    await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        gs.player.value = 80;
+        if (gs.boss) { gs.boss.destroy(); gs.boss = null; }
+        gs.bossSpawned = false;
+        gs.spawnBoss();
+        gs.updateArenaRanking();
+    });
+    await v5Page.waitForTimeout(200);
+
+    const bossRanking1 = await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return {
+            leaderName: gs.currentRanking.leader ? gs.currentRanking.leader.name : null,
+            leaderId: gs.currentRanking.leader ? gs.currentRanking.leader.id : null,
+            crownVisible: gs.worldCrown.visible
+        };
+    });
+    assert(bossRanking1.leaderName === 'BOSS 100', `BOSS 100 holds #1 rank over Player 80, got ${bossRanking1.leaderName}`);
+    assert(bossRanking1.leaderId === 'boss', `Boss holds crown`);
+
+    // Player grows to 101 -> overtakes Boss
+    await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        gs.player.value = 101;
+        gs.boss.update(gs.player.head.x, gs.player.head.y, 101);
+        gs.updateArenaRanking();
+    });
+
+    const bossRanking2 = await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return {
+            leaderName: gs.currentRanking.leader ? gs.currentRanking.leader.name : null,
+            leaderId: gs.currentRanking.leader ? gs.currentRanking.leader.id : null,
+            bossIsFleeing: gs.boss ? gs.boss.isFleeing : false
+        };
+    });
+    assert(bossRanking2.leaderName === 'YOU' && bossRanking2.leaderId === 'player', `Player 101 overtakes Boss 100 for #1 rank`);
+    assert(bossRanking2.bossIsFleeing, `Boss behavior FLEE preserved upon reversal`);
+
+    // --- Test BA: SCORE / BEST / NEW BEST ---
+    console.log('\n--- Test BA: SCORE / BEST / NEW BEST ---');
+    // Set existing L1 best to 100
+    await v5Page.evaluate(() => {
+        const prog = JSON.parse(localStorage.getItem('number_snake_progression') || '{}');
+        prog.bestScoreByLevel = { 1: 100 };
+        localStorage.setItem('number_snake_progression', JSON.stringify(prog));
+        window.__PHASER_GAME__.scene.start('GameScene', { levelId: 1 });
+    });
+    await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('GameScene'), { timeout: 10000 });
+
+    // Run score 90 (below best 100) -> Game Over
+    await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        gs.hud.setScore(90);
+        gs.gameOver();
+    });
+    await v5Page.waitForTimeout(300);
+
+    const endScreen1 = await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return {
+            score: gs.hud.getScore(),
+            isNewBest: gs.isNewBest,
+            worldCrownVisible: gs.worldCrown.visible
+        };
+    });
+    assert(endScreen1.score === 90, `End screen shows Score 90`);
+    assert(endScreen1.isNewBest === false, `Score 90 is NOT a new best`);
+    assert(!endScreen1.worldCrownVisible, `World crown hidden on Game Over screen`);
+
+    // Next run: Score 120 (above best 100) -> Game Over
+    await v5Page.evaluate(() => {
+        window.__PHASER_GAME__.scene.start('GameScene', { levelId: 1 });
+    });
+    await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('GameScene'), { timeout: 10000 });
+    await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        gs.hud.setScore(120);
+        gs.gameOver();
+    });
+    await v5Page.waitForTimeout(300);
+
+    const endScreen2 = await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return {
+            score: gs.hud.getScore(),
+            isNewBest: gs.isNewBest,
+            worldCrownVisible: gs.worldCrown.visible
+        };
+    });
+    assert(endScreen2.score === 120, `End screen shows Score 120`);
+    assert(endScreen2.isNewBest === true, `Score 120 triggers NEW BEST!`);
+
+    // Reload menu and verify Level 1 shows BEST: 120
+    await v5Page.evaluate(() => {
+        window.__PHASER_GAME__.scene.start('MenuScene');
+    });
+    await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('MenuScene'), { timeout: 10000 });
+    const menuBest = await v5Page.evaluate(() => {
+        const { ProgressionManager } = window;
+        const ms = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'MenuScene');
+        const card = ms.levelCards[0];
+        const textObj = card.list.find(item => item.text && item.text.startsWith('BEST:'));
+        return textObj ? textObj.text : '';
+    });
+    assert(menuBest === 'BEST: 120', `Menu Level 1 displays persisted BEST: 120, got ${menuBest}`);
+
+    // --- Test: PLAYER OUTSIDE TOP 5 (Requirement 59) ---
+    console.log('\n--- Test: PLAYER OUTSIDE TOP 5 ---');
+    await v5Page.evaluate(() => {
+        window.__PHASER_GAME__.scene.start('GameScene', { levelId: 1 });
+    });
+    await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('GameScene'), { timeout: 10000 });
+    await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        gs.stopSpawning();
+        gs.player.value = 15; // Lower than 6 enemies
+        gs.enemies = [];
+        const vals = [100, 90, 80, 70, 60, 50];
+        vals.forEach((v, idx) => {
+            const e = gs.spawnEnemy(v);
+            e.arenaId = `bot_${idx}`;
+            e.arenaName = `BOT ${idx + 1}`;
+            e.value = v;
+        });
+        gs.updateArenaRanking();
+    });
+    const outsideTop5 = await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return {
+            playerRank: gs.currentRanking.playerRank ? gs.currentRanking.playerRank.rank : null,
+            extraRowVisible: gs.leaderboard.playerExtraRow ? gs.leaderboard.playerExtraRow.visible : false,
+            extraRowText: gs.leaderboard.playerExtraRow ? gs.leaderboard.playerExtraRow.text : ''
+        };
+    });
+    assert(outsideTop5.playerRank === 7, `Player rank is 7 (outside top 5)`);
+    assert(outsideTop5.extraRowVisible, 'Player extra row is visible when outside top 5');
+    assert(outsideTop5.extraRowText.includes('YOU') && outsideTop5.extraRowText.includes('#7'), `Extra row displays YOU #7, got ${outsideTop5.extraRowText}`);
+
+    // --- Test: TIE STABILITY (Requirement 60) ---
+    console.log('\n--- Test: TIE STABILITY ---');
+    await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        gs.enemies = [];
+        const e1 = gs.spawnEnemy(50); e1.arenaId = 'enemy_a'; e1.arenaName = 'TIED_A'; e1.value = 50;
+        const e2 = gs.spawnEnemy(50); e2.arenaId = 'enemy_b'; e2.arenaName = 'TIED_B'; e2.value = 50;
+        gs.enemies.push(e1, e2);
+        gs.updateArenaRanking();
+    });
+    const tie1 = await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return gs.currentRanking.leader ? gs.currentRanking.leader.id : null;
+    });
+    // Several refreshes
+    for (let r = 0; r < 3; r++) {
+        await v5Page.evaluate(() => {
+            const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+            gs.updateArenaRanking();
+        });
+    }
+    const tie2 = await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return gs.currentRanking.leader ? gs.currentRanking.leader.id : null;
+    });
+    assert(tie1 === 'enemy_a' && tie2 === 'enemy_a', 'Tie-breaking remains deterministic and stable across refreshes');
+
+    // --- Test: SCORE SUBMIT ONCE IDEMPOTENCY (Requirement 61) ---
+    console.log('\n--- Test: SCORE SUBMISSION IDEMPOTENCY ---');
+    const submitTwice = await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        gs.scoreSubmitted = false;
+        gs.hud.setScore(500);
+        const res1 = gs.saveScore();
+        const res2 = gs.saveScore();
+        return { res1, res2, scoreSubmitted: gs.scoreSubmitted };
+    });
+    assert(submitTwice.res1 === true, 'First saveScore submits score');
+    assert(submitTwice.res2 === false, 'Second saveScore call is safely ignored (idempotent)');
+
+    // --- Test BB: RESPONSIVE ARENA UI ---
+    console.log('\n--- Test BB: RESPONSIVE ARENA UI ---');
+    const arenaViewports = [
+        [390, 844],
+        [430, 932],
+        [768, 1024],
+        [834, 1194],
+        [1024, 1366],
+        [1366, 768],
+        [1920, 1080]
+    ];
+
+    for (const [vw, vh] of arenaViewports) {
+        await v5Page.setViewportSize({ width: vw, height: vh });
+        await v5Page.waitForTimeout(200);
+
+        // Check PrepScene responsive
+        await v5Page.evaluate(() => {
+            window.__PHASER_GAME__.scene.start('PrepScene', { levelId: 1 });
+        });
+        await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('PrepScene'), { timeout: 10000 });
+        const prepResp = await v5Page.evaluate((bounds) => {
+            const ps = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
+            const startBtnY = ps.startLevelBtnBg.y;
+            const backBtnY = ps.backBtnBg.y;
+            return {
+                cardsVisible: ps.cardContainers.length === 3,
+                startInView: startBtnY > 0 && startBtnY < bounds.h,
+                backInView: backBtnY > 0 && backBtnY < bounds.h
+            };
+        }, { w: vw, h: vh });
+        assert(prepResp.cardsVisible && prepResp.startInView && prepResp.backInView, `PrepScene controls fully in viewport on ${vw}x${vh}`);
+
+        // Check GameScene responsive
+        await v5Page.evaluate(() => {
+            window.__PHASER_GAME__.scene.start('GameScene', { levelId: 1 });
+        });
+        await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('GameScene'), { timeout: 10000 });
+        const gameResp = await v5Page.evaluate((bounds) => {
+            const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+            const lbX = gs.leaderboard.container.x;
+            const lbY = gs.leaderboard.container.y;
+            const lbW = gs.leaderboard.panelWidth;
+            return {
+                lbInView: lbX >= 0 && lbX + lbW <= bounds.w && lbY >= 0,
+                hasHud: !!gs.hud
+            };
+        }, { w: vw, h: vh });
+        assert(gameResp.lbInView, `Leaderboard panel within viewport bounds on ${vw}x${vh}`);
+    }
+
+    await v5Context.close();
+
     console.log(`\n=== FINAL SCRIPT RESULTS ===`);
     console.log(`Total Errors/Failed Asserts: ${totalErrors}`);
     
@@ -2510,3 +3046,4 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
         process.exit(1);
     }
 })();
+

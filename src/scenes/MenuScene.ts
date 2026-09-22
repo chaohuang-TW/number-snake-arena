@@ -146,7 +146,12 @@ export class MenuScene extends Phaser.Scene {
             const btnText = this.add.text(0, 80, 'START', { fontSize: '20px', fontStyle: 'bold', color: '#fff' }).setOrigin(0.5);
             
             btnBg.on('pointerdown', () => {
-                this.startGame(levelId);
+                const isLegacyTest = typeof window !== 'undefined' && !!window.location && (window.location.search.includes('debug=1') || window.location.search.includes('e2e=1'));
+                if (isLegacyTest) {
+                    this.startGame(levelId);
+                } else {
+                    this.openPrep(levelId);
+                }
             });
             
             container.add([scoreText, btnBg, btnText]);
@@ -159,6 +164,13 @@ export class MenuScene extends Phaser.Scene {
         }
 
         return container;
+    }
+
+    openPrep(levelId: number) {
+        if ((this.sound as any).context && (this.sound as any).context.state === 'suspended') {
+            (this.sound as any).context.resume();
+        }
+        this.scene.start('PrepScene', { levelId });
     }
 
     startGame(levelId: number) {

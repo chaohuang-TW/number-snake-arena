@@ -6,6 +6,7 @@ export class HUD {
     scene: Phaser.Scene;
     hpText: Phaser.GameObjects.Text;
     scoreText: Phaser.GameObjects.Text;
+    bestScoreText: Phaser.GameObjects.Text;
     magnetText: Phaser.GameObjects.Text;
     boostBarBg: Phaser.GameObjects.Graphics;
     boostBarFill: Phaser.GameObjects.Graphics;
@@ -33,7 +34,13 @@ export class HUD {
             color: '#ffffff'
         }).setScrollFactor(0).setDepth(200);
 
-        this.magnetText = scene.add.text(20, 80, '🧲 MAGNET READY', {
+        this.bestScoreText = scene.add.text(20, 78, 'BEST: 0', {
+            fontSize: '18px',
+            fontStyle: 'bold',
+            color: '#aaaaaa'
+        }).setScrollFactor(0).setDepth(200);
+
+        this.magnetText = scene.add.text(20, 106, '🧲 MAGNET READY', {
             fontSize: '20px',
             fontStyle: 'bold',
             color: '#00ffff'
@@ -144,6 +151,15 @@ export class HUD {
     addScore(points: number) {
         this.score += points;
         this.scoreText.setText(`SCORE: ${this.score}`);
+    }
+
+    setScore(score: number) {
+        this.score = score;
+        this.scoreText.setText(`SCORE: ${this.score}`);
+    }
+
+    setBestScore(best: number) {
+        this.bestScoreText.setText(`BEST: ${best}`);
     }
 
     getScore(): number {

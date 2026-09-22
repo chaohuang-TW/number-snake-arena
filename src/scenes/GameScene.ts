@@ -12,6 +12,9 @@ import { isEdible, calculateDamage, calculateNewBodySegments } from '../utils/ga
 import { DebugUI } from '../ui/DebugUI';
 import { MagnetAbility } from '../systems/MagnetAbility';
 import { CollectibleOrb } from '../entities/CollectibleOrb';
+import { LeaderboardPanel } from '../ui/LeaderboardPanel';
+import { getRankingResult, type ArenaParticipant, type RankingResult } from '../utils/ranking';
+import { normalizeStartValue } from '../utils/prepValues';
 
 export class GameScene extends Phaser.Scene {
     player!: PlayerSnake;
@@ -24,6 +27,15 @@ export class GameScene extends Phaser.Scene {
     hud!: HUD;
     audio!: AudioSystem;
     debugUI?: DebugUI;
+    leaderboard!: LeaderboardPanel;
+    leaderboardTimer?: Phaser.Time.TimerEvent;
+    worldCrown!: Phaser.GameObjects.Image;
+    currentLeaderId: string | null = null;
+    currentRanking: RankingResult | null = null;
+
+    runStartValue: number = 5;
+    scoreSubmitted: boolean = false;
+    isNewBest: boolean = false;
 
     keys!: {
         w: Phaser.Input.Keyboard.Key,
@@ -63,6 +75,7 @@ export class GameScene extends Phaser.Scene {
         this.levelId = data?.levelId || 1;
         ProgressionManager.load();
         this.levelDef = getLevel(this.levelId);
+        this.runStartValue = normalizeStartValue(data?.startValueOverride ?? this.levelDef.startValue);
     }
 
     create() {
@@ -87,7 +100,10 @@ export class GameScene extends Phaser.Scene {
         this.createBackgroundTheme();
 
         const maxHP = ProgressionManager.getMaxHP();
-        this.player = new PlayerSnake(this, 0, 0, this.levelDef.startValue, maxHP);
+        this.scoreSubmitted = false;
+        this.isNewBest = false;
+        this.currentLeaderId = null;
+        this.player = new PlayerSnake(this, 0, 0, this.runStartValue, maxHP);
         this.cameras.main.startFollow(this.player.head, true, 0.1, 0.1);
         this.cameras.main.setZoom(1);
 
@@ -96,7 +112,20 @@ export class GameScene extends Phaser.Scene {
         this.joystick = new VirtualJoystick(this);
         this.hud = new HUD(this);
         this.hud.onMagnetTrigger = () => this.activateMagnet();
+        this.hud.setBestScore(ProgressionManager.getBestScore(this.levelId));
         this.audio = new AudioSystem(this);
+
+        // Leaderboard panel and world crown
+        this.leaderboard = new LeaderboardPanel(this);
+        this.worldCrown = this.add.image(0, -9999, 'crown_gold').setDepth(205).setVisible(false);
+
+        this.leaderboardTimer = this.time.addEvent({
+            delay: 250,
+            callback: this.updateArenaRanking,
+            callbackScope: this,
+            loop: true
+        });
+        this.updateArenaRanking();
         
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.get('e2e') === '1') {
@@ -180,7 +209,21 @@ export class GameScene extends Phaser.Scene {
                     segmentCount: this.enemies[index]?.bodySprites?.length
                 }),
                 getCurrentThemeKey: () => this.levelDef.theme,
-                getOrbs: () => this.orbs
+                getOrbs: () => this.orbs,
+                // v0.5.0 Debug APIs
+                getArenaRanking: () => this.currentRanking?.all || [],
+                getPlayerArenaRank: () => this.currentRanking?.playerRank?.rank || 0,
+                getCrownHolderId: () => this.currentRanking?.leader?.id || null,
+                getRunStartValue: () => this.runStartValue,
+                setDeterministicArenaParticipantNamesForTest: (names: string[]) => {
+                    this.enemies.forEach((e, i) => {
+                        if (names[i]) {
+                            e.arenaId = `enemy_${i + 1}`;
+                            e.arenaName = names[i];
+                        }
+                    });
+                    this.updateArenaRanking();
+                }
             };
         } else {
             // Ensure no debug API exists in normal mode
@@ -462,22 +505,122 @@ export class GameScene extends Phaser.Scene {
             this.magnet.getHUDText(),
             this.magnet.state
         );
+
+        if (this.worldCrown && this.worldCrown.visible && this.gameState === 'RUNNING') {
+            this.followLeaderHead();
+        }
+    }
+
+    updateArenaRanking() {
+        if (this.gameState !== 'RUNNING') {
+            if (this.worldCrown) this.worldCrown.setVisible(false);
+            return;
+        }
+
+        const participants: ArenaParticipant[] = [];
+
+        if (this.player && this.player.head && this.player.head.active) {
+            participants.push({
+                id: 'player',
+                name: 'YOU',
+                value: this.player.value,
+                type: 'player'
+            });
+        }
+
+        for (const e of this.enemies) {
+            if (e.body && e.body.active) {
+                participants.push({
+                    id: e.arenaId,
+                    name: e.arenaName,
+                    value: e.value,
+                    type: 'enemy'
+                });
+            }
+        }
+
+        if (this.boss && this.boss.body && this.boss.body.active) {
+            participants.push({
+                id: this.boss.arenaId,
+                name: this.boss.arenaName,
+                value: this.boss.value,
+                type: 'boss'
+            });
+        }
+
+        const result = getRankingResult(participants);
+        this.currentRanking = result;
+        if (this.leaderboard) {
+            this.leaderboard.updateRanking(result);
+        }
+
+        if (result.leader) {
+            const newLeaderId = result.leader.id;
+            if (this.currentLeaderId !== newLeaderId) {
+                this.currentLeaderId = newLeaderId;
+                this.tweens.add({
+                    targets: this.worldCrown,
+                    scale: { from: 1.4, to: 1.0 },
+                    duration: 250
+                });
+            }
+            this.followLeaderHead();
+            this.worldCrown.setVisible(true);
+        } else {
+            this.currentLeaderId = null;
+            this.worldCrown.setVisible(false);
+        }
+    }
+
+    followLeaderHead() {
+        if (!this.currentRanking?.leader || this.gameState !== 'RUNNING') {
+            if (this.worldCrown) this.worldCrown.setVisible(false);
+            return;
+        }
+
+        const leader = this.currentRanking.leader;
+        if (leader.type === 'player') {
+            if (this.player?.head?.active) {
+                this.worldCrown.setPosition(this.player.head.x, this.player.head.y - 38);
+                this.worldCrown.setVisible(true);
+            } else {
+                this.worldCrown.setVisible(false);
+            }
+        } else if (leader.type === 'boss') {
+            if (this.boss?.body?.active) {
+                this.worldCrown.setPosition(this.boss.body.x, this.boss.body.y - 48);
+                this.worldCrown.setVisible(true);
+            } else {
+                this.worldCrown.setVisible(false);
+            }
+        } else if (leader.type === 'enemy') {
+            const e = this.enemies.find(en => en.arenaId === leader.id);
+            if (e && e.body && e.body.active) {
+                this.worldCrown.setPosition(e.body.x, e.body.y - 38);
+                this.worldCrown.setVisible(true);
+            } else {
+                this.worldCrown.setVisible(false);
+            }
+        }
     }
 
     hardReset() {
         this.gameState = 'RUNNING';
-        this.player.value = this.levelDef.startValue;
+        this.player.value = this.runStartValue;
         this.player.hp = ProgressionManager.getMaxHP();
         this.player.segments = 5;
         this.player.boostEnergy = 100;
         this.comboCount = 0;
         this.player.isInvulnerable = false;
+        this.scoreSubmitted = false;
+        this.isNewBest = false;
         for (const e of this.enemies) { e.destroy(); }
         this.enemies = [];
         this.clearOrbs();
         this.magnet.reset();
         if (this.boss) { this.boss.destroy(); this.boss = null; this.bossSpawned = false; }
         this.spawnTimer = 9999999;
+        this.updateArenaRanking();
     }
 
     stopSpawning() {
@@ -772,6 +915,8 @@ export class GameScene extends Phaser.Scene {
     }
 
     showLevelClearScreen(newlyClaimedReward: boolean, newlyUnlocked: boolean) {
+        if (this.worldCrown) this.worldCrown.setVisible(false);
+
         const cx = this.cameras.main.scrollX + this.scale.width / 2;
         const cy = this.cameras.main.scrollY + this.scale.height / 2;
 
@@ -783,21 +928,33 @@ export class GameScene extends Phaser.Scene {
         this.add.text(cx, cy - 140, `${this.levelDef.name} CLEAR!`, { fontSize: '56px', fontStyle: 'bold', color: '#00ff00' }).setOrigin(0.5).setDepth(301);
         
         let currentY = cy - 40;
+
+        const scoreVal = this.hud.getScore();
+        const bestVal = ProgressionManager.getBestScore(this.levelId);
+        this.add.text(cx, currentY - 30, `SCORE: ${scoreVal}    BEST: ${bestVal}`, {
+            fontSize: '22px', fontStyle: 'bold', color: '#ffffff'
+        }).setOrigin(0.5).setDepth(301);
+
+        if (this.isNewBest) {
+            this.add.text(cx, currentY - 5, 'NEW BEST!', {
+                fontSize: '20px', fontStyle: 'bold', color: '#ffd700'
+            }).setOrigin(0.5).setDepth(301);
+        }
         
         if (!this.levelDef.nextLevelId) {
-            this.add.text(cx, currentY, 'ALL LEVELS CLEARED!', { fontSize: '36px', fontStyle: 'bold', color: '#ffff00' }).setOrigin(0.5).setDepth(301);
-            this.add.text(cx, currentY + 60, 'YOU BECAME THE NUMBER MASTER!', { fontSize: '24px', fontStyle: 'bold', color: '#00ffff' }).setOrigin(0.5).setDepth(301);
+            this.add.text(cx, currentY + 25, 'ALL LEVELS CLEARED!', { fontSize: '36px', fontStyle: 'bold', color: '#ffff00' }).setOrigin(0.5).setDepth(301);
+            this.add.text(cx, currentY + 75, 'YOU BECAME THE NUMBER MASTER!', { fontSize: '24px', fontStyle: 'bold', color: '#00ffff' }).setOrigin(0.5).setDepth(301);
             this.time.delayedCall(500, () => {
-                this.createLevelClearButtons(cx, cy + 140);
+                this.createLevelClearButtons(cx, cy + 145);
             });
             return;
         }
 
         if (newlyClaimedReward) {
-            this.add.text(cx, currentY, '+1 HEART', { fontSize: '32px', fontStyle: 'bold', color: '#ff5555' }).setOrigin(0.5).setDepth(301);
+            this.add.text(cx, currentY + 20, '+1 HEART', { fontSize: '32px', fontStyle: 'bold', color: '#ff5555' }).setOrigin(0.5).setDepth(301);
             const oldMax = ProgressionManager.getMaxHP() - this.levelDef.reward!.value;
             const newMax = ProgressionManager.getMaxHP();
-            const heartText = this.add.text(cx, currentY + 40, `${oldMax} HEARTS`, { fontSize: '32px' }).setOrigin(0.5).setDepth(301);
+            const heartText = this.add.text(cx, currentY + 60, `${oldMax} HEARTS`, { fontSize: '32px' }).setOrigin(0.5).setDepth(301);
             
             this.time.delayedCall(800, () => {
                 heartText.setText(`${oldMax} → ${newMax} HEARTS`);
@@ -809,18 +966,18 @@ export class GameScene extends Phaser.Scene {
                     onComplete: () => {
                         if (newlyUnlocked) {
                             this.time.delayedCall(400, () => {
-                                this.add.text(cx, currentY + 100, `LEVEL ${this.levelDef.nextLevelId} UNLOCKED!`, { fontSize: '36px', fontStyle: 'bold', color: '#00ffff' }).setOrigin(0.5).setDepth(301);
-                                this.createLevelClearButtons(cx, cy + 180);
+                                this.add.text(cx, currentY + 110, `LEVEL ${this.levelDef.nextLevelId} UNLOCKED!`, { fontSize: '36px', fontStyle: 'bold', color: '#00ffff' }).setOrigin(0.5).setDepth(301);
+                                this.createLevelClearButtons(cx, cy + 185);
                             });
                         } else {
-                            this.createLevelClearButtons(cx, cy + 180);
+                            this.createLevelClearButtons(cx, cy + 185);
                         }
                     }
                 });
             });
         } else {
             if (newlyUnlocked) {
-                this.add.text(cx, currentY + 60, `LEVEL ${this.levelDef.nextLevelId} UNLOCKED!`, { fontSize: '36px', fontStyle: 'bold', color: '#00ffff' }).setOrigin(0.5).setDepth(301);
+                this.add.text(cx, currentY + 30, `LEVEL ${this.levelDef.nextLevelId} UNLOCKED!`, { fontSize: '36px', fontStyle: 'bold', color: '#00ffff' }).setOrigin(0.5).setDepth(301);
             }
             this.time.delayedCall(500, () => {
                 this.createLevelClearButtons(cx, cy + 140);
@@ -829,13 +986,19 @@ export class GameScene extends Phaser.Scene {
     }
 
     createLevelClearButtons(cx: number, cy: number) {
+        const isLegacyE2E = typeof window !== 'undefined' && !!window.location && window.location.search.includes('e2e=1');
+
         if (!this.levelDef.nextLevelId) {
             const playAgainBtn = this.add.text(cx, cy - 30, 'PLAY AGAIN', {
                 fontSize: '32px', backgroundColor: '#555555', padding: { x: 20, y: 10 }
             }).setOrigin(0.5).setDepth(301).setInteractive({ useHandCursor: true });
             
             playAgainBtn.on('pointerdown', () => {
-                this.scene.start('GameScene', { levelId: this.levelId });
+                if (isLegacyE2E) {
+                    this.scene.start('GameScene', { levelId: 4 });
+                } else {
+                    this.scene.start('PrepScene', { levelId: 4 });
+                }
             });
 
             const levelSelectBtn = this.add.text(cx, cy + 50, 'LEVEL SELECT', {
@@ -854,7 +1017,11 @@ export class GameScene extends Phaser.Scene {
             }).setOrigin(0.5).setDepth(301).setInteractive({ useHandCursor: true });
             
             nextBtn.on('pointerdown', () => {
-                this.scene.start('GameScene', { levelId: this.levelDef.nextLevelId });
+                if (isLegacyE2E) {
+                    this.scene.start('GameScene', { levelId: this.levelDef.nextLevelId });
+                } else {
+                    this.scene.start('PrepScene', { levelId: this.levelDef.nextLevelId });
+                }
             });
         }
 
@@ -863,7 +1030,11 @@ export class GameScene extends Phaser.Scene {
         }).setOrigin(0.5).setDepth(301).setInteractive({ useHandCursor: true });
         
         replayBtn.on('pointerdown', () => {
-            this.scene.start('GameScene', { levelId: this.levelId });
+            if (isLegacyE2E) {
+                this.scene.start('GameScene', { levelId: this.levelId });
+            } else {
+                this.scene.start('PrepScene', { levelId: this.levelId });
+            }
         });
 
         const menuBtn = this.add.text(cx, cy + 60, 'MENU', {
@@ -877,6 +1048,7 @@ export class GameScene extends Phaser.Scene {
 
     gameOver() {
         this.gameState = 'GAME_OVER';
+        if (this.worldCrown) this.worldCrown.setVisible(false);
         this.clearOrbs();
         this.audio.playGameOver();
         this.saveScore();
@@ -885,20 +1057,27 @@ export class GameScene extends Phaser.Scene {
 
     victory() {
         this.gameState = 'VICTORY';
+        if (this.worldCrown) this.worldCrown.setVisible(false);
         this.clearOrbs();
         this.audio.playVictory();
         this.saveScore();
         this.showEndScreen('VICTORY', '#00ff00');
     }
 
-    saveScore() {
+    saveScore(): boolean {
+        if (this.scoreSubmitted) return false;
+        this.scoreSubmitted = true;
         const s = this.hud.getScore();
         const b = parseInt(localStorage.getItem('bestScore') || '0', 10);
         if (s > b) localStorage.setItem('bestScore', s.toString());
-        ProgressionManager.submitScore(this.levelId, s);
+        this.isNewBest = ProgressionManager.submitScore(this.levelId, s);
+        this.hud.setBestScore(ProgressionManager.getBestScore(this.levelId));
+        return this.isNewBest;
     }
 
     showEndScreen(title: string, color: string) {
+        if (this.worldCrown) this.worldCrown.setVisible(false);
+
         const cx = this.cameras.main.scrollX + this.scale.width / 2;
         const cy = this.cameras.main.scrollY + this.scale.height / 2;
 
@@ -907,22 +1086,35 @@ export class GameScene extends Phaser.Scene {
         bg.fillRect(this.cameras.main.scrollX, this.cameras.main.scrollY, this.scale.width, this.scale.height);
         bg.setDepth(300);
 
-        this.add.text(cx, cy - 100, title, { fontSize: '64px', fontStyle: 'bold', color }).setOrigin(0.5).setDepth(301);
-        this.add.text(cx, cy - 20, `FINAL VALUE: ${this.player.value}`, { fontSize: '24px', color: '#fff' }).setOrigin(0.5).setDepth(301);
-        this.add.text(cx, cy + 20, `SCORE: ${this.hud.getScore()}`, { fontSize: '24px', color: '#fff' }).setOrigin(0.5).setDepth(301);
+        this.add.text(cx, cy - 110, title, { fontSize: '64px', fontStyle: 'bold', color }).setOrigin(0.5).setDepth(301);
+        this.add.text(cx, cy - 35, `FINAL VALUE: ${this.player.value}`, { fontSize: '24px', color: '#fff' }).setOrigin(0.5).setDepth(301);
+        this.add.text(cx, cy + 5, `SCORE: ${this.hud.getScore()}`, { fontSize: '24px', color: '#fff' }).setOrigin(0.5).setDepth(301);
+        this.add.text(cx, cy + 38, `BEST: ${ProgressionManager.getBestScore(this.levelId)}`, { fontSize: '20px', color: '#aaaaaa' }).setOrigin(0.5).setDepth(301);
 
-        const btn = this.add.text(cx, cy + 100, 'PLAY AGAIN', {
+        if (this.isNewBest) {
+            this.add.text(cx, cy + 68, 'NEW BEST!', { fontSize: '22px', fontStyle: 'bold', color: '#ffd700' }).setOrigin(0.5).setDepth(301);
+        }
+
+        const btn = this.add.text(cx, cy + (this.isNewBest ? 116 : 100), 'PLAY AGAIN', {
             fontSize: '32px', backgroundColor: '#0055aa', padding: { x: 20, y: 10 }
         }).setOrigin(0.5).setDepth(301).setInteractive({ useHandCursor: true });
 
         btn.on('pointerdown', () => {
-            this.scene.start('GameScene');
+            const isLegacyE2E = typeof window !== 'undefined' && !!window.location && window.location.search.includes('e2e=1');
+            if (isLegacyE2E) {
+                this.scene.start('GameScene', { levelId: this.levelId });
+            } else {
+                this.scene.start('PrepScene', { levelId: this.levelId });
+            }
         });
     }
 
     teardown() {
         document.removeEventListener('visibilitychange', this.handleVisibilityChange);
         this.scale.off('resize', this.resize, this);
+        this.leaderboardTimer?.remove();
+        this.worldCrown?.destroy();
+        this.leaderboard?.destroy();
         this.enemies.forEach(e => e.destroy());
         this.clearOrbs();
         this.player.destroy();
@@ -934,5 +1126,6 @@ export class GameScene extends Phaser.Scene {
     resize(gameSize: Phaser.Structs.Size) {
         this.joystick.resize(gameSize);
         this.hud.resize(gameSize);
+        this.leaderboard?.resize(gameSize);
     }
 }

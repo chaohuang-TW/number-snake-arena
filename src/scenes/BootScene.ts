@@ -117,6 +117,36 @@ export class BootScene extends Phaser.Scene {
         graphics.fillCircle(4, 4, 4);
         graphics.generateTexture('particle', 8, 8);
 
+        // Gold Crown (32x24)
+        graphics.clear();
+        // Subtle glow
+        graphics.fillStyle(0xffd700, 0.35);
+        graphics.fillCircle(16, 12, 12);
+        // Crown path
+        graphics.fillStyle(0xffd700, 1);
+        graphics.beginPath();
+        graphics.moveTo(4, 20);
+        graphics.lineTo(4, 8);
+        graphics.lineTo(10, 14);
+        graphics.lineTo(16, 4);
+        graphics.lineTo(22, 14);
+        graphics.lineTo(28, 8);
+        graphics.lineTo(28, 20);
+        graphics.closePath();
+        graphics.fillPath();
+        // Dark outline
+        graphics.lineStyle(1.5, 0x3a2000, 1);
+        graphics.strokePath();
+        // Jewels / Highlights on tips
+        graphics.fillStyle(0xffff77, 1);
+        graphics.fillCircle(4, 8, 2);
+        graphics.fillCircle(16, 4, 2.5);
+        graphics.fillCircle(28, 8, 2);
+        // Base rim highlight
+        graphics.fillStyle(0xffffff, 0.7);
+        graphics.fillRect(8, 17, 16, 2);
+        graphics.generateTexture('crown_gold', 32, 24);
+
         graphics.destroy();
     }
 

@@ -1,7 +1,7 @@
 # NUMBER SNAKE ARENA 🐍
 
-**Version:** `v0.4.1`
-**Status:** Snake Evolution Release Closeout: 4 playable levels, full progression, magnet ability, skin customization, dynamic themes.
+**Version:** `v0.5.0`
+**Status:** Arena & Progression Release: 4 playable levels, live Arena ranking, gold crown leader indicator, pre-battle start value boost, score & best presentation, magnet ability, skin customization, dynamic themes.
 
 A web-based arcade game where you control a snake of numbers, growing by eating smaller numbers while avoiding larger ones.
 
@@ -12,6 +12,26 @@ A web-based arcade game where you control a snake of numbers, growing by eating 
 * **Role Reversal**: If you grow larger than a previously dangerous number, it will start fleeing from you!
 * **Combo**: Eat numbers in quick succession to build a multiplier and grow faster.
 * **Boost**: Hold Spacebar or the virtual Boost button to consume boost energy for a burst of speed.
+* **Arena Ranking & Top 5 Leaderboard**:
+  * Real-time in-game leaderboard panel displaying the Top 5 snakes by numeric value.
+  * If the player falls outside the Top 5, an additional 6th row dynamically displays the player's current rank and value.
+  * AI snakes are assigned persistent arena callsigns (`NOVA`, `BYTE`, `VOLT`, `TITAN`, `CYBER`, etc.).
+  * Bosses dynamically join arena rankings (e.g. `BOSS 100`, `BOSS 200`, `BOSS 300`, `BOSS 400`).
+* **Gold Crown (`crown_gold`)**:
+  * Procedurally rendered gold crown indicator displayed beside the #1 snake in the leaderboard.
+  * Gold crown floats dynamically above the #1 arena leader's head in the game world, smoothly transferring whenever the leader changes.
+  * Automatically hidden on victory/game over end screens and scene shutdowns.
+* **Pre-Battle Start Value Boost (`PrepScene`)**:
+  * Preparation screen between Level Select and battle start.
+  * Start value options: **STANDARD (5)**, **BOOST (7)**, **POWER (10)**.
+  * Defaults safely to 5.
+  * Run-only boost: does not alter permanent progression or baseline level definitions.
+  * Death/respawn (`hardReset()`) restores player to the selected `runStartValue`.
+* **Score & Best Record Presentation**:
+  * Live HUD displays current run Score alongside personal Level Best (`BEST: X`).
+  * Victory and Game Over end screens display final Score and Level Best.
+  * Highlighting gold `NEW BEST!` banner on setting a new personal record.
+  * Idempotent score persistence preventing duplicate submissions per run.
 * **Magnet Ability**:
   * **Pull Radius**: 260px radius
   * **Duration**: 8s active duration
@@ -46,16 +66,13 @@ A web-based arcade game where you control a snake of numbers, growing by eating 
 | 3 | lava-core | 5 | 5 | 300 | 230 | 299 | +1 Heart / Unlock L4 |
 | 4 | deep-space | 5 | 6 | 400 | 310 | 399 | Final Clear |
 
-* **LocalStorage Progression**: Your progression, skin cosmetics, and per-level best scores are automatically saved to your browser.
+* **LocalStorage Progression**: Your unlocked levels, cosmetics, and per-level high scores are saved automatically to your browser.
 
-## Deferred / Not Implemented Yet
+## Deferred Features (NOT in v0.5.0)
 
-* No leaderboard yet
-* No gold crown yet
-* No pre-battle upgrade yet
-* No Lucky Wheel yet
-* No Ultimate Boss yet
-* No Level 5
+* **Lucky Wheel**: Deferred to future release.
+* **Ultimate Final Boss**: Deferred to future release.
+* **Level 5**: Deferred to future release.
 
 ## Controls
 

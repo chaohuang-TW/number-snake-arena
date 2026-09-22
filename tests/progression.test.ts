@@ -102,6 +102,26 @@ describe('ProgressionManager', () => {
         expect(ProgressionManager.hasClaimedReward('level-2-clear-heart')).toBe(false); // L2 reward must NOT be auto-granted
     });
 
+    it('existing v0.4.1 save remains completely valid without schema migration', () => {
+        const v041Save = {
+            version: 1,
+            highestUnlockedLevel: 4,
+            maxHPBonus: 3,
+            claimedRewards: ['level-1-clear-heart', 'level-2-clear-heart', 'level-3-clear-heart'],
+            bestScoreByLevel: { 1: 3200, 2: 4500, 3: 5800, 4: 9200 }
+        };
+        localStorage.setItem('number_snake_progression', JSON.stringify(v041Save));
+
+        ProgressionManager.load();
+        expect(ProgressionManager.getHighestUnlockedLevel()).toBe(4);
+        expect(ProgressionManager.getMaxHP()).toBe(6);
+        expect(ProgressionManager.hasClaimedReward('level-1-clear-heart')).toBe(true);
+        expect(ProgressionManager.hasClaimedReward('level-2-clear-heart')).toBe(true);
+        expect(ProgressionManager.hasClaimedReward('level-3-clear-heart')).toBe(true);
+        expect(ProgressionManager.getBestScore(1)).toBe(3200);
+        expect(ProgressionManager.getBestScore(4)).toBe(9200);
+    });
+
     it('best scores remain isolated by level', () => {
         ProgressionManager.load();
         ProgressionManager.submitScore(2, 500);

@@ -16,6 +16,15 @@ interface HistoryPoint {
 }
 
 export class NumberEnemy {
+    public static readonly NAME_POOL = [
+        'NOVA', 'BYTE', 'VOLT', 'PIXEL', 'NEXUS', 'COMET',
+        'SPARK', 'ORBIT', 'NEON', 'PULSE', 'QUARK', 'FLUX'
+    ];
+    private static nextEnemyIndex = 1;
+    public static resetEnemyIdCounter() {
+        NumberEnemy.nextEnemyIndex = 1;
+    }
+
     scene: Phaser.Scene;
     body: Phaser.Physics.Arcade.Image; // The head (Arcade physics)
     valueText: Phaser.GameObjects.Text;
@@ -24,6 +33,9 @@ export class NumberEnemy {
     value: number;
     state: EnemyState = EnemyState.WANDER;
     headSkinId: string;
+
+    arenaId: string;
+    arenaName: string;
     
     // Visual-only body segments and tail
     bodySprites: Phaser.GameObjects.Image[] = [];
@@ -36,6 +48,12 @@ export class NumberEnemy {
     constructor(scene: Phaser.Scene, x: number, y: number, value: number, skinStyle?: string) {
         this.scene = scene;
         this.value = value;
+
+        const idNum = NumberEnemy.nextEnemyIndex++;
+        this.arenaId = `enemy_${idNum}`;
+        const nameIdx = (idNum - 1) % NumberEnemy.NAME_POOL.length;
+        const cycle = Math.floor((idNum - 1) / NumberEnemy.NAME_POOL.length);
+        this.arenaName = cycle === 0 ? NumberEnemy.NAME_POOL[nameIdx] : `${NumberEnemy.NAME_POOL[nameIdx]} ${String(cycle + 1).padStart(2, '0')}`;
         
         // Deterministic or random head skin assignment
         const skinKeys = Object.keys(HEAD_SKINS);

@@ -8,6 +8,10 @@ export class NumberBoss {
     
     value: number;
     isFleeing: boolean = false;
+    readonly arenaId: string = 'boss';
+    get arenaName(): string {
+        return `BOSS ${this.value}`;
+    }
 
     constructor(scene: Phaser.Scene, x: number, y: number, value: number) {
         this.scene = scene;

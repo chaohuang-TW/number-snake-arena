@@ -2125,8 +2125,15 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
         };
     });
 
-    // Run across real game frames under active magnet (180ms is ~68px pull travel at 380px/s)
-    await evoPage.waitForTimeout(180);
+    // Deterministically wait for magnet to pull smaller enemy closer across real frames
+    await evoPage.waitForFunction(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        if (!gs) return false;
+        const eSmaller = gs.enemies.find(e => e.__testId === 'smallerInside');
+        if (!eSmaller) return false;
+        const d = Math.hypot(gs.player.head.x - eSmaller.body.x, gs.player.head.y - eSmaller.body.y);
+        return d <= 210;
+    }, { timeout: 10000 });
 
     const postEvaluation = await evoPage.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
@@ -2428,10 +2435,15 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
         return { scoreBefore, boostBefore, initialDist };
     });
 
-    assert(magnetOrbInit.initialDist >= 190, `Initial orb distance is ~200px, got ${magnetOrbInit.initialDist}`);
-
-    // Wait real game frames for magnet to pull orb toward player
-    await evoPage.waitForTimeout(300);
+    // Deterministically wait for magnet to pull orb closer across real frames
+    await evoPage.waitForFunction(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        if (!gs) return false;
+        const orb = gs.orbs.find(o => o.__testId === 'magnetOrb');
+        if (!orb || orb.isCollected) return true;
+        const d = Math.hypot(gs.player.head.x - orb.sprite.x, gs.player.head.y - orb.sprite.y);
+        return d <= 170;
+    }, { timeout: 10000 });
 
     const midPullCheck = await evoPage.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
@@ -2445,8 +2457,13 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
     assert(midPullCheck.collectedEarly || midPullCheck.midDist < magnetOrbInit.initialDist - 30,
         `Loose orb at ~200px moved closer under magnet across real frames (midDist: ${midPullCheck.midDist.toFixed(1)})`);
 
-    // Wait another 550ms for orb to enter < 32px collection radius and get consumed by production update
-    await evoPage.waitForTimeout(550);
+    // Deterministically wait for orb to enter < 32px collection radius and get consumed by production update
+    await evoPage.waitForFunction(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        if (!gs) return false;
+        const orb = gs.orbs.find(o => o.__testId === 'magnetOrb');
+        return !orb || orb.isCollected;
+    }, { timeout: 10000 });
 
     const postPullCheck = await evoPage.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');

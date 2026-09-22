@@ -3399,6 +3399,7 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
 
     // 1. Open PrepScene, select 10
     await v5Page.evaluate(() => {
+        window.__PHASER_GAME__.scene.stop('GameScene');
         window.__PHASER_GAME__.scene.start('PrepScene', { levelId: 1 });
     });
     await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('PrepScene'), { timeout: 10000 });
@@ -3407,7 +3408,10 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
         ps.selectStartValue(10);
         ps.startLevel();
     });
-    await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('GameScene'), { timeout: 10000 });
+    await v5Page.waitForFunction(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return gs && window.__PHASER_GAME__.scene.isActive('GameScene') && gs.runStartValue === 10 && gs.player && gs.player.value === 10;
+    }, { timeout: 10000 });
     const runBF1 = await v5Page.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
         return gs.player.value;
@@ -3419,11 +3423,14 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
         gs.gameOver();
     });
-    await v5Page.waitForTimeout(300);
+    await v5Page.waitForFunction(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return gs && gs.children.list.some(c => c.name === 'playAgainBtn' || (c.type === 'Text' && c.text === 'PLAY AGAIN'));
+    }, { timeout: 10000 });
     await v5Page.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
         const btn = gs.children.list.find(c => c.name === 'playAgainBtn' || (c.type === 'Text' && c.text === 'PLAY AGAIN'));
-        btn.emit('pointerdown');
+        if (btn) btn.emit('pointerdown');
     });
     await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('PrepScene'), { timeout: 10000 });
 

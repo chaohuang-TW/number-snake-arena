@@ -2592,14 +2592,11 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
             return { x: container.x + cardBg.x, y: container.y + cardBg.y };
         }, val);
         await v5Page.mouse.click(cardCoord.x, cardCoord.y);
-        await v5Page.evaluate((v) => {
+        await v5Page.waitForFunction((v) => {
             const ps = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
-            if (ps && ps.getSelectedStartValue() !== v) {
-                const cardBg = ps.cardBgs.find(b => b.name === `prepCard_${v}`);
-                if (cardBg) cardBg.emit('pointerdown');
-            }
-        }, val);
-        await v5Page.waitForTimeout(200);
+            return ps && ps.getSelectedStartValue() === v;
+        }, val, { timeout: 5000 });
+        await v5Page.waitForTimeout(100);
     };
 
     const clickStartLevel = async () => {
@@ -2608,12 +2605,6 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
             return { x: ps.startLevelBtnBg.x, y: ps.startLevelBtnBg.y };
         });
         await v5Page.mouse.click(btnCoord.x, btnCoord.y);
-        await v5Page.evaluate(() => {
-            const ps = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
-            if (ps && ps.scene.isActive()) {
-                if (ps.startLevelBtnBg) ps.startLevelBtnBg.emit('pointerdown');
-            }
-        });
     };
 
     // 1. Verify Card 5 selected by default, click START LEVEL via real mouse click
@@ -2720,7 +2711,10 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
         gs.gameOver();
     });
-    await v5Page.waitForTimeout(300);
+    await v5Page.waitForFunction(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return gs && gs.children.list.some(c => c.name === 'playAgainBtn' || (c.type === 'Text' && c.text === 'PLAY AGAIN'));
+    }, { timeout: 10000 });
     const goBtnCoord = await v5Page.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
         const btn = gs.children.list.find(c => c.name === 'playAgainBtn' || (c.type === 'Text' && c.text === 'PLAY AGAIN'));
@@ -2729,13 +2723,6 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
         return { x: b.centerX - cam.scrollX, y: b.centerY - cam.scrollY };
     });
     await v5Page.mouse.click(goBtnCoord.x, goBtnCoord.y);
-    await v5Page.evaluate(() => {
-        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
-        if (gs && gs.scene.isActive()) {
-            const btn = gs.children.list.find(c => c.name === 'playAgainBtn' || (c.type === 'Text' && c.text === 'PLAY AGAIN'));
-            if (btn) btn.emit('pointerdown');
-        }
-    });
     await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('PrepScene'), { timeout: 10000 });
     let currentPrepLvl = await v5Page.evaluate(() => {
         const ps = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
@@ -2748,10 +2735,16 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
         const prog = JSON.parse(localStorage.getItem('number_snake_progression') || '{}');
         prog.highestUnlockedLevel = 4;
         localStorage.setItem('number_snake_progression', JSON.stringify(prog));
+        if (window.__NUMBER_SNAKE_DEBUG__ && window.__NUMBER_SNAKE_DEBUG__.getProgression) {
+            window.__NUMBER_SNAKE_DEBUG__.getProgression().highestUnlockedLevel = 4;
+        }
     });
 
     // 3. Level Clear REPLAY LEVEL real click (Level 1)
     await v5Page.evaluate(() => {
+        if (window.__NUMBER_SNAKE_DEBUG__ && window.__NUMBER_SNAKE_DEBUG__.getProgression) {
+            window.__NUMBER_SNAKE_DEBUG__.getProgression().highestUnlockedLevel = 4;
+        }
         window.__PHASER_GAME__.scene.stop('PrepScene');
         window.__PHASER_GAME__.scene.start('GameScene', { levelId: 1 });
     });
@@ -2772,13 +2765,6 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
         return { x: b.centerX - cam.scrollX, y: b.centerY - cam.scrollY };
     });
     await v5Page.mouse.click(replayBtnCoord.x, replayBtnCoord.y);
-    await v5Page.evaluate(() => {
-        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
-        if (gs && gs.scene.isActive()) {
-            const btn = gs.children.list.find(c => c.name === 'replayBtn' || (c.type === 'Text' && c.text === 'REPLAY LEVEL'));
-            if (btn) btn.emit('pointerdown');
-        }
-    });
     await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('PrepScene'), { timeout: 10000 });
     let replayPrepLvl = await v5Page.evaluate(() => {
         const ps = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
@@ -2789,6 +2775,12 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
     // 4. NEXT LEVEL routing L1 -> L2, L2 -> L3, L3 -> L4 via real clicks
     for (const lvl of [1, 2, 3]) {
         await v5Page.evaluate((l) => {
+            const prog = JSON.parse(localStorage.getItem('number_snake_progression') || '{}');
+            prog.highestUnlockedLevel = 4;
+            localStorage.setItem('number_snake_progression', JSON.stringify(prog));
+            if (window.__NUMBER_SNAKE_DEBUG__ && window.__NUMBER_SNAKE_DEBUG__.getProgression) {
+                window.__NUMBER_SNAKE_DEBUG__.getProgression().highestUnlockedLevel = 4;
+            }
             window.__PHASER_GAME__.scene.stop('PrepScene');
             window.__PHASER_GAME__.scene.start('GameScene', { levelId: l });
         }, lvl);
@@ -2801,6 +2793,7 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
             const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
             return gs && gs.children.list.some(c => c.name === 'nextBtn' || (c.type === 'Text' && c.text === 'NEXT LEVEL'));
         }, { timeout: 10000 });
+        await v5Page.waitForTimeout(300);
         const nextBtnCoord = await v5Page.evaluate(() => {
             const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
             const btn = gs.children.list.find(c => c.name === 'nextBtn' || (c.type === 'Text' && c.text === 'NEXT LEVEL'));
@@ -2809,16 +2802,9 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
             return { x: b.centerX - cam.scrollX, y: b.centerY - cam.scrollY };
         });
         await v5Page.mouse.click(nextBtnCoord.x, nextBtnCoord.y);
-        await v5Page.evaluate(() => {
-            const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
-            if (gs && gs.scene.isActive()) {
-                const btn = gs.children.list.find(c => c.name === 'nextBtn' || (c.type === 'Text' && c.text === 'NEXT LEVEL'));
-                if (btn) btn.emit('pointerdown');
-            }
-        });
         await v5Page.waitForFunction((expected) => {
             const ps = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
-            return ps && ps.levelId === expected;
+            return ps && window.__PHASER_GAME__.scene.isActive('PrepScene') && ps.levelId === expected;
         }, lvl + 1, { timeout: 10000 });
         const nextLvl = await v5Page.evaluate(() => {
             const ps = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
@@ -2829,6 +2815,12 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
 
     // 5. Level 4 PLAY AGAIN real click
     await v5Page.evaluate(() => {
+        const prog = JSON.parse(localStorage.getItem('number_snake_progression') || '{}');
+        prog.highestUnlockedLevel = 4;
+        localStorage.setItem('number_snake_progression', JSON.stringify(prog));
+        if (window.__NUMBER_SNAKE_DEBUG__ && window.__NUMBER_SNAKE_DEBUG__.getProgression) {
+            window.__NUMBER_SNAKE_DEBUG__.getProgression().highestUnlockedLevel = 4;
+        }
         window.__PHASER_GAME__.scene.stop('PrepScene');
         window.__PHASER_GAME__.scene.start('GameScene', { levelId: 4 });
     });
@@ -2841,6 +2833,7 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
         return gs && gs.children.list.some(c => c.name === 'playAgainBtn' || (c.type === 'Text' && c.text === 'PLAY AGAIN'));
     }, { timeout: 10000 });
+    await v5Page.waitForTimeout(300);
     const l4PlayAgainCoord = await v5Page.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
         const btn = gs.children.list.find(c => c.name === 'playAgainBtn' || (c.type === 'Text' && c.text === 'PLAY AGAIN'));
@@ -2849,16 +2842,9 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
         return { x: b.centerX - cam.scrollX, y: b.centerY - cam.scrollY };
     });
     await v5Page.mouse.click(l4PlayAgainCoord.x, l4PlayAgainCoord.y);
-    await v5Page.evaluate(() => {
-        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
-        if (gs && gs.scene.isActive()) {
-            const btn = gs.children.list.find(c => c.name === 'playAgainBtn' || (c.type === 'Text' && c.text === 'PLAY AGAIN'));
-            if (btn) btn.emit('pointerdown');
-        }
-    });
     await v5Page.waitForFunction(() => {
         const ps = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
-        return ps && ps.levelId === 4;
+        return ps && window.__PHASER_GAME__.scene.isActive('PrepScene') && ps.levelId === 4;
     }, { timeout: 10000 });
     const l4Prep = await v5Page.evaluate(() => {
         const ps = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
@@ -3413,17 +3399,22 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
     await v5Page.setViewportSize({ width: 1024, height: 768 });
     await v5Page.waitForTimeout(200);
 
-    // 1. Open PrepScene, select 10
+    // 1. Open Prep, click actual POWER / 10 card, verify selected visual state, click actual START LEVEL, assert run Value10
     await v5Page.evaluate(() => {
         window.__PHASER_GAME__.scene.stop('GameScene');
         window.__PHASER_GAME__.scene.start('PrepScene', { levelId: 1 });
     });
     await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('PrepScene'), { timeout: 10000 });
-    await v5Page.evaluate(() => {
+    
+    await clickPrepCard(10);
+    const bfCard10State = await v5Page.evaluate(() => {
         const ps = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
-        ps.selectStartValue(10);
-        ps.startLevel();
+        const card10 = ps.cardBgs.find(b => b.getData('value') === 10);
+        return card10 ? card10.getData('isSelected') : false;
     });
+    assert(bfCard10State === true, 'BF: Card 10 visually selected via physical click');
+
+    await clickStartLevel();
     await v5Page.waitForFunction(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
         return gs && window.__PHASER_GAME__.scene.isActive('GameScene') && gs.runStartValue === 10 && gs.player && gs.player.value === 10;
@@ -3432,9 +3423,9 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
         return gs.player.value;
     });
-    assert(runBF1 === 10, 'Run started with boosted start value 10');
+    assert(runBF1 === 10, 'BF: Run started with boosted start value 10 via physical click');
 
-    // 2. Trigger Game Over and return to PrepScene via PLAY AGAIN
+    // 2. Trigger Game Over, click actual PLAY AGAIN, assert Prep default5
     await v5Page.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
         gs.gameOver();
@@ -3443,18 +3434,95 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
         return gs && gs.children.list.some(c => c.name === 'playAgainBtn' || (c.type === 'Text' && c.text === 'PLAY AGAIN'));
     }, { timeout: 10000 });
-    await v5Page.evaluate(() => {
+    const bfGoCoord = await v5Page.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
         const btn = gs.children.list.find(c => c.name === 'playAgainBtn' || (c.type === 'Text' && c.text === 'PLAY AGAIN'));
-        if (btn) btn.emit('pointerdown');
+        const cam = gs.cameras.main;
+        const b = btn.getBounds();
+        return { x: b.centerX - cam.scrollX, y: b.centerY - cam.scrollY };
     });
+    await v5Page.mouse.click(bfGoCoord.x, bfGoCoord.y);
     await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('PrepScene'), { timeout: 10000 });
 
-    const freshPrepVal = await v5Page.evaluate(() => {
+    const freshPrepVal1 = await v5Page.evaluate(() => {
         const ps = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
         return ps.getSelectedStartValue();
     });
-    assert(freshPrepVal === 5, `PrepScene always resets to standard default 5 on fresh opening, got ${freshPrepVal}`);
+    assert(freshPrepVal1 === 5, `BF: After Game Over PLAY AGAIN, Prep resets to default 5, got ${freshPrepVal1}`);
+
+    // 3. Choose 7 using actual card, actual START LEVEL, Level Clear, actual REPLAY LEVEL, assert Prep default5
+    await clickPrepCard(7);
+    const bfCard7State = await v5Page.evaluate(() => {
+        const ps = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
+        const card7 = ps.cardBgs.find(b => b.getData('value') === 7);
+        return card7 ? card7.getData('isSelected') : false;
+    });
+    assert(bfCard7State === true, 'BF: Card 7 visually selected via physical click');
+
+    await clickStartLevel();
+    await v5Page.waitForFunction(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return gs && window.__PHASER_GAME__.scene.isActive('GameScene') && gs.runStartValue === 7 && gs.player && gs.player.value === 7;
+    }, { timeout: 10000 });
+
+    await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        gs.levelClear();
+    });
+    await v5Page.waitForFunction(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return gs && gs.children.list.some(c => c.name === 'replayBtn' || (c.type === 'Text' && c.text === 'REPLAY LEVEL'));
+    }, { timeout: 10000 });
+    const bfReplayCoord = await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        const btn = gs.children.list.find(c => c.name === 'replayBtn' || (c.type === 'Text' && c.text === 'REPLAY LEVEL'));
+        const cam = gs.cameras.main;
+        const b = btn.getBounds();
+        return { x: b.centerX - cam.scrollX, y: b.centerY - cam.scrollY };
+    });
+    await v5Page.mouse.click(bfReplayCoord.x, bfReplayCoord.y);
+    await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('PrepScene'), { timeout: 10000 });
+
+    const freshPrepVal2 = await v5Page.evaluate(() => {
+        const ps = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
+        return ps.getSelectedStartValue();
+    });
+    assert(freshPrepVal2 === 5, `BF: After REPLAY LEVEL, Prep resets to default 5, got ${freshPrepVal2}`);
+
+    // 4. Choose 10 using actual card, actual START LEVEL, Level Clear, actual NEXT LEVEL, assert next-level Prep default5
+    await clickPrepCard(10);
+    await clickStartLevel();
+    await v5Page.waitForFunction(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return gs && window.__PHASER_GAME__.scene.isActive('GameScene') && gs.runStartValue === 10 && gs.player && gs.player.value === 10;
+    }, { timeout: 10000 });
+
+    await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        gs.levelClear();
+    });
+    await v5Page.waitForFunction(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return gs && gs.children.list.some(c => c.name === 'nextBtn' || (c.type === 'Text' && c.text === 'NEXT LEVEL'));
+    }, { timeout: 10000 });
+    const bfNextCoord = await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        const btn = gs.children.list.find(c => c.name === 'nextBtn' || (c.type === 'Text' && c.text === 'NEXT LEVEL'));
+        const cam = gs.cameras.main;
+        const b = btn.getBounds();
+        return { x: b.centerX - cam.scrollX, y: b.centerY - cam.scrollY };
+    });
+    await v5Page.mouse.click(bfNextCoord.x, bfNextCoord.y);
+    await v5Page.waitForFunction(() => {
+        const ps = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
+        return ps && window.__PHASER_GAME__.scene.isActive('PrepScene') && ps.levelId === 2;
+    }, { timeout: 10000 });
+
+    const freshPrepVal3 = await v5Page.evaluate(() => {
+        const ps = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
+        return ps.getSelectedStartValue();
+    });
+    assert(freshPrepVal3 === 5, `BF: After NEXT LEVEL, next-level Prep resets to default 5, got ${freshPrepVal3}`);
 
     await v5Context.close();
 

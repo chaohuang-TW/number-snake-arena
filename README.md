@@ -1,7 +1,7 @@
 # NUMBER SNAKE ARENA 🐍
 
-**Version:** `v0.5.0`
-**Status:** Arena & Progression Release: 4 playable levels, live Arena ranking, gold crown leader indicator, pre-battle start value boost, score & best presentation, magnet ability, skin customization, dynamic themes.
+**Version:** `v0.5.1`
+**Status:** Responsive & Acceptance Closeout: Mobile leaderboard layout fix, pure layout geometry validation, clean production routing, full responsive overlap tests.
 
 A web-based arcade game where you control a snake of numbers, growing by eating smaller numbers while avoiding larger ones.
 

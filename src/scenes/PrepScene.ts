@@ -139,6 +139,9 @@ export class PrepScene extends Phaser.Scene {
             const bg = this.add.rectangle(0, 0, cardW, cardH, isSelected ? 0x004488 : 0x112233, 0.95)
                 .setStrokeStyle(isSelected ? 3 : 1.5, isSelected ? 0x00ffff : 0x446688)
                 .setInteractive({ useHandCursor: true });
+            bg.setName(`prepCard_${opt.value}`);
+            bg.setData('value', opt.value);
+            bg.setData('isSelected', isSelected);
 
             const labelText = this.add.text(0, -42, opt.label, {
                 fontSize: cardW < 90 ? '11px' : '13px',
@@ -188,6 +191,7 @@ export class PrepScene extends Phaser.Scene {
         this.startLevelBtnBg = this.add.rectangle(cx, btnY - 26, 220, 44, 0x00aa00, 1)
             .setStrokeStyle(2, 0x00ff88)
             .setInteractive({ useHandCursor: true });
+        this.startLevelBtnBg.setName('startLevelBtn');
         this.startLevelBtnText = this.add.text(cx, btnY - 26, 'START LEVEL', {
             fontSize: '20px',
             fontStyle: 'bold',
@@ -202,6 +206,7 @@ export class PrepScene extends Phaser.Scene {
         this.backBtnBg = this.add.rectangle(cx, btnY + 28, 140, 34, 0x334455, 0.9)
             .setStrokeStyle(1.5, 0x6688aa)
             .setInteractive({ useHandCursor: true });
+        this.backBtnBg.setName('backBtn');
         this.backBtnText = this.add.text(cx, btnY + 28, 'BACK', {
             fontSize: '15px',
             fontStyle: 'bold',

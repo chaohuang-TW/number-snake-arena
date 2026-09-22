@@ -986,24 +986,20 @@ export class GameScene extends Phaser.Scene {
     }
 
     createLevelClearButtons(cx: number, cy: number) {
-        const isLegacyE2E = typeof window !== 'undefined' && !!window.location && window.location.search.includes('e2e=1');
-
         if (!this.levelDef.nextLevelId) {
             const playAgainBtn = this.add.text(cx, cy - 30, 'PLAY AGAIN', {
                 fontSize: '32px', backgroundColor: '#555555', padding: { x: 20, y: 10 }
             }).setOrigin(0.5).setDepth(301).setInteractive({ useHandCursor: true });
+            playAgainBtn.setName('playAgainBtn');
             
             playAgainBtn.on('pointerdown', () => {
-                if (isLegacyE2E) {
-                    this.scene.start('GameScene', { levelId: 4 });
-                } else {
-                    this.scene.start('PrepScene', { levelId: 4 });
-                }
+                this.scene.start('PrepScene', { levelId: 4 });
             });
 
             const levelSelectBtn = this.add.text(cx, cy + 50, 'LEVEL SELECT', {
                 fontSize: '32px', backgroundColor: '#0055aa', padding: { x: 20, y: 10 }
             }).setOrigin(0.5).setDepth(301).setInteractive({ useHandCursor: true });
+            levelSelectBtn.setName('levelSelectBtn');
             
             levelSelectBtn.on('pointerdown', () => {
                 this.scene.start('MenuScene');
@@ -1015,31 +1011,26 @@ export class GameScene extends Phaser.Scene {
             const nextBtn = this.add.text(cx, cy - 60, 'NEXT LEVEL', {
                 fontSize: '32px', backgroundColor: '#00aa00', padding: { x: 20, y: 10 }
             }).setOrigin(0.5).setDepth(301).setInteractive({ useHandCursor: true });
+            nextBtn.setName('nextBtn');
             
             nextBtn.on('pointerdown', () => {
-                if (isLegacyE2E) {
-                    this.scene.start('GameScene', { levelId: this.levelDef.nextLevelId });
-                } else {
-                    this.scene.start('PrepScene', { levelId: this.levelDef.nextLevelId });
-                }
+                this.scene.start('PrepScene', { levelId: this.levelDef.nextLevelId });
             });
         }
 
         const replayBtn = this.add.text(cx, cy, 'REPLAY LEVEL', {
             fontSize: '24px', backgroundColor: '#555555', padding: { x: 15, y: 8 }
         }).setOrigin(0.5).setDepth(301).setInteractive({ useHandCursor: true });
+        replayBtn.setName('replayBtn');
         
         replayBtn.on('pointerdown', () => {
-            if (isLegacyE2E) {
-                this.scene.start('GameScene', { levelId: this.levelId });
-            } else {
-                this.scene.start('PrepScene', { levelId: this.levelId });
-            }
+            this.scene.start('PrepScene', { levelId: this.levelId });
         });
 
         const menuBtn = this.add.text(cx, cy + 60, 'MENU', {
             fontSize: '24px', backgroundColor: '#0055aa', padding: { x: 15, y: 8 }
         }).setOrigin(0.5).setDepth(301).setInteractive({ useHandCursor: true });
+        menuBtn.setName('menuBtn');
         
         menuBtn.on('pointerdown', () => {
             this.scene.start('MenuScene');
@@ -1098,14 +1089,10 @@ export class GameScene extends Phaser.Scene {
         const btn = this.add.text(cx, cy + (this.isNewBest ? 116 : 100), 'PLAY AGAIN', {
             fontSize: '32px', backgroundColor: '#0055aa', padding: { x: 20, y: 10 }
         }).setOrigin(0.5).setDepth(301).setInteractive({ useHandCursor: true });
+        btn.setName('playAgainBtn');
 
         btn.on('pointerdown', () => {
-            const isLegacyE2E = typeof window !== 'undefined' && !!window.location && window.location.search.includes('e2e=1');
-            if (isLegacyE2E) {
-                this.scene.start('GameScene', { levelId: this.levelId });
-            } else {
-                this.scene.start('PrepScene', { levelId: this.levelId });
-            }
+            this.scene.start('PrepScene', { levelId: this.levelId });
         });
     }
 
@@ -1127,5 +1114,19 @@ export class GameScene extends Phaser.Scene {
         this.joystick.resize(gameSize);
         this.hud.resize(gameSize);
         this.leaderboard?.resize(gameSize);
+    }
+
+    getLayoutBounds() {
+        return {
+            hp: this.hud.getHPBounds(),
+            score: this.hud.getScoreBounds(),
+            best: this.hud.getBestBounds(),
+            magnetHUD: this.hud.getMagnetHUDBounds(),
+            boostBar: this.hud.getBoostBarBounds(),
+            boostButton: this.hud.getBoostButtonBounds(),
+            magnetButton: this.hud.getMagnetButtonBounds(),
+            joystick: this.joystick.getBounds(),
+            leaderboard: this.leaderboard.getBounds()
+        };
     }
 }

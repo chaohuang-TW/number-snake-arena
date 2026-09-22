@@ -143,15 +143,11 @@ export class MenuScene extends Phaser.Scene {
             }).setOrigin(0.5);
             
             const btnBg = this.add.rectangle(0, 80, 120, 40, 0x00aa00, 1).setInteractive({ useHandCursor: true });
+            btnBg.setName(`startBtn_${levelId}`);
             const btnText = this.add.text(0, 80, 'START', { fontSize: '20px', fontStyle: 'bold', color: '#fff' }).setOrigin(0.5);
             
             btnBg.on('pointerdown', () => {
-                const isLegacyTest = typeof window !== 'undefined' && !!window.location && (window.location.search.includes('debug=1') || window.location.search.includes('e2e=1'));
-                if (isLegacyTest) {
-                    this.startGame(levelId);
-                } else {
-                    this.openPrep(levelId);
-                }
+                this.openPrep(levelId);
             });
             
             container.add([scoreText, btnBg, btnText]);

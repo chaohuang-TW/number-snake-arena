@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { isTouchCapableDevice } from '../utils/device';
+import type { RectBounds } from '../utils/layout';
 
 export class VirtualJoystick {
     scene: Phaser.Scene;
@@ -89,5 +90,14 @@ export class VirtualJoystick {
         // Reset base position to bottom left area
         this.base.setPosition(100, gameSize.height - 100);
         this.thumb.setPosition(100, gameSize.height - 100);
+    }
+
+    getBounds(): RectBounds {
+        return {
+            x: this.base.x - 60,
+            y: this.base.y - 60,
+            width: 120,
+            height: 120
+        };
     }
 }

@@ -1,5 +1,5 @@
-import Phaser from 'phaser';
 import type { RankingResult, RankedParticipant } from '../utils/ranking';
+import type { RectBounds } from '../utils/layout';
 
 export class LeaderboardPanel {
     public container: Phaser.GameObjects.Container;
@@ -166,11 +166,20 @@ export class LeaderboardPanel {
             this.playerExtraRow.setFontSize('11px');
         }
 
-        // Top-right corner
+        // Top-right corner (placed below top HUD on narrow screens to prevent overlap)
         const posX = Math.max(10, w - this.panelWidth - 12);
-        const posY = 12;
+        const posY = w <= 450 ? 148 : 12;
         this.container.setPosition(posX, posY);
         this.drawBackground();
+    }
+
+    public getBounds(): RectBounds {
+        return {
+            x: this.container.x,
+            y: this.container.y,
+            width: this.panelWidth,
+            height: this.panelHeight
+        };
     }
 
     public destroy() {

@@ -2,6 +2,8 @@ import Phaser from 'phaser';
 import { isTouchCapableDevice } from '../utils/device';
 import type { MagnetState } from '../systems/MagnetAbility';
 
+import type { RectBounds } from '../utils/layout';
+
 export class HUD {
     scene: Phaser.Scene;
     hpText: Phaser.GameObjects.Text;
@@ -187,5 +189,55 @@ export class HUD {
             this.magnetButton.setVisible(isTouch);
             this.magnetButtonText.setVisible(isTouch);
         }
+    }
+
+    getHPBounds(): RectBounds {
+        const b = this.hpText.getBounds();
+        return { x: b.x, y: b.y, width: b.width, height: b.height };
+    }
+
+    getScoreBounds(): RectBounds {
+        const b = this.scoreText.getBounds();
+        return { x: b.x, y: b.y, width: b.width, height: b.height };
+    }
+
+    getBestBounds(): RectBounds {
+        const b = this.bestScoreText.getBounds();
+        return { x: b.x, y: b.y, width: b.width, height: b.height };
+    }
+
+    getMagnetHUDBounds(): RectBounds {
+        const b = this.magnetText.getBounds();
+        return { x: b.x, y: b.y, width: b.width, height: b.height };
+    }
+
+    getBoostBarBounds(): RectBounds {
+        const barWidth = 200;
+        const barHeight = 20;
+        const cx = this.scene.scale.width / 2;
+        return {
+            x: cx - barWidth / 2,
+            y: 20,
+            width: barWidth,
+            height: barHeight
+        };
+    }
+
+    getBoostButtonBounds(): RectBounds {
+        return {
+            x: this.boostButton.x - 50,
+            y: this.boostButton.y - 50,
+            width: 100,
+            height: 100
+        };
+    }
+
+    getMagnetButtonBounds(): RectBounds {
+        return {
+            x: this.magnetButton.x - 42,
+            y: this.magnetButton.y - 42,
+            width: 84,
+            height: 84
+        };
     }
 }

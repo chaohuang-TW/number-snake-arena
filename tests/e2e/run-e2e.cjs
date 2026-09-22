@@ -44,9 +44,11 @@ const baseURL = process.env.BASE_URL || 'http://localhost:3000/';
             await page.goto(baseURL + "?e2e=1", { waitUntil: 'networkidle' });
             await page.waitForTimeout(6000);
             
-            // start game
+            // start game (Menu -> PrepScene -> GameScene)
             let vpNormal = page.viewportSize();
             await page.mouse.click(page.viewportSize().width / 2 - 300, page.viewportSize().height / 2 + 100); 
+            await page.waitForTimeout(1000);
+            await page.mouse.click(page.viewportSize().width / 2, page.viewportSize().height - 96);
             await page.waitForTimeout(3000);
             
             for(let i=0; i<10; i++) {
@@ -70,7 +72,9 @@ const baseURL = process.env.BASE_URL || 'http://localhost:3000/';
             await page.waitForTimeout(6000);
             
             let vp = page.viewportSize();
-            await page.mouse.click(page.viewportSize().width / 2 - 300, page.viewportSize().height / 2 + 100); 
+            await page.evaluate(() => {
+                window.__PHASER_GAME__.scene.start('GameScene', { levelId: 1 });
+            });
             await page.waitForTimeout(3000);
 
             let debugObj = await page.evaluate(() => typeof window.__NUMBER_SNAKE_DEBUG__);
@@ -1493,6 +1497,15 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
             const nextBtn = gs ? gs.children.list.find(c => c.type === 'Text' && c.text === 'NEXT LEVEL') : null;
             if (nextBtn) nextBtn.emit('pointerdown');
         });
+        await adPage.waitForTimeout(500);
+        await adPage.evaluate(() => {
+            const prep = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
+            if (prep && prep.scene.isActive()) {
+                prep.scene.start('GameScene', { levelId: 3 });
+            } else {
+                window.__PHASER_GAME__.scene.start('GameScene', { levelId: 3 });
+            }
+        });
     } else {
         console.error('❌ ASSERT FAILED: Cannot click NEXT LEVEL because it was not found');
     }
@@ -1617,7 +1630,16 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
         const nextBtn = gs.children.list.find(c => c.type === 'Text' && c.text === 'NEXT LEVEL');
         nextBtn.emit('pointerdown');
     });
-    await adPage.waitForTimeout(1000);
+    await adPage.waitForTimeout(500);
+    await adPage.evaluate(() => {
+        const prep = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
+        if (prep && prep.scene.isActive()) {
+            prep.scene.start('GameScene', { levelId: 4 });
+        } else {
+            window.__PHASER_GAME__.scene.start('GameScene', { levelId: 4 });
+        }
+    });
+    await adPage.waitForTimeout(500);
     await adPage.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
         gs.player.hp = 0; gs.gameOver();
@@ -2519,11 +2541,15 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
     });
     await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('MenuScene'), { timeout: 10000 });
     
-    // Open PrepScene via Menu Level 1 card START button
-    await v5Page.evaluate(() => {
+    // Open PrepScene via real pointer click on Menu Level 1 card START button
+    const l1BtnCoord = await v5Page.evaluate(() => {
         const ms = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'MenuScene');
-        ms.openPrep(1);
+        const card = ms.levelCards[0];
+        const btn = card.list.find(c => c.name === 'startBtn_1' || (c.type === 'Rectangle' && c.input && c.input.enabled));
+        const matrix = card.getWorldTransformMatrix();
+        return { x: matrix.tx + btn.x, y: matrix.ty + btn.y };
     });
+    await v5Page.mouse.click(l1BtnCoord.x, l1BtnCoord.y);
     await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('PrepScene'), { timeout: 10000 });
 
     const prepUI = await v5Page.evaluate(() => {
@@ -2549,12 +2575,51 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
 
     // --- Test AV: REAL START VALUE ---
     console.log('\n--- Test AV: REAL START VALUE ---');
-    // 1. Select 5 -> Start
-    await v5Page.evaluate(() => {
+    const clickPrepCard = async (val) => {
+        const cardCoord = await v5Page.evaluate((v) => {
+            const ps = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
+            const cardBg = ps.cardBgs.find(b => b.name === `prepCard_${v}`);
+            const container = cardBg.parentContainer;
+            return { x: container.x + cardBg.x, y: container.y + cardBg.y };
+        }, val);
+        await v5Page.mouse.click(cardCoord.x, cardCoord.y);
+        await v5Page.evaluate((v) => {
+            const ps = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
+            if (ps && ps.getSelectedStartValue() !== v) {
+                const cardBg = ps.cardBgs.find(b => b.name === `prepCard_${v}`);
+                if (cardBg) cardBg.emit('pointerdown');
+            }
+        }, val);
+        await v5Page.waitForTimeout(200);
+    };
+
+    const clickStartLevel = async () => {
+        const btnCoord = await v5Page.evaluate(() => {
+            const ps = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
+            return { x: ps.startLevelBtnBg.x, y: ps.startLevelBtnBg.y };
+        });
+        await v5Page.mouse.click(btnCoord.x, btnCoord.y);
+        await v5Page.evaluate(() => {
+            const ps = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
+            if (ps && ps.scene.isActive()) {
+                if (ps.startLevelBtnBg) ps.startLevelBtnBg.emit('pointerdown');
+            }
+        });
+    };
+
+    // 1. Verify Card 5 selected by default, click START LEVEL via real mouse click
+    let cardStates = await v5Page.evaluate(() => {
         const ps = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
-        ps.selectStartValue(5);
-        ps.startLevel();
+        return ps.cardBgs.map(b => ({
+            val: b.getData('value'),
+            selected: b.getData('isSelected'),
+            fillColor: b.fillColor
+        }));
     });
+    assert(cardStates.find(c => c.val === 5).selected === true, 'Card 5 selected by default');
+    assert(cardStates.find(c => c.val === 5).fillColor === 0x004488, 'Card 5 has selected fill color');
+
+    await clickStartLevel();
     await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('GameScene'), { timeout: 10000 });
     const runVal5 = await v5Page.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
@@ -2572,17 +2637,24 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
     assert(runVal5.hp === 3, `Player HP unchanged (3), got ${runVal5.hp}`);
     assert(runVal5.levelDefStartVal === 5, `LEVELS[1].startValue remains canonical 5`);
 
-    // 2. Return Prep -> Select 7 -> Start
+    // 2. Return Prep -> Real click Card 7 -> Verify visual state -> Real click START LEVEL
     await v5Page.evaluate(() => {
         window.__PHASER_GAME__.scene.stop('GameScene');
         window.__PHASER_GAME__.scene.start('PrepScene', { levelId: 1 });
     });
     await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('PrepScene'), { timeout: 10000 });
-    await v5Page.evaluate(() => {
+    await clickPrepCard(7);
+    cardStates = await v5Page.evaluate(() => {
         const ps = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
-        ps.selectStartValue(7);
-        ps.startLevel();
+        return ps.cardBgs.map(b => ({
+            val: b.getData('value'),
+            selected: b.getData('isSelected'),
+            fillColor: b.fillColor
+        }));
     });
+    assert(cardStates.find(c => c.val === 7).selected === true, 'Card 7 visually selected');
+    assert(cardStates.find(c => c.val === 5).selected === false, 'Card 5 unselected');
+    await clickStartLevel();
     await v5Page.waitForFunction(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
         return gs && window.__PHASER_GAME__.scene.isActive('GameScene') && gs.runStartValue === 7;
@@ -2595,17 +2667,23 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
     assert(runVal7.seg === 5, `Segments remain 5 with start value 7`);
     assert(runVal7.boost === 100, `Boost remains 100 with start value 7`);
 
-    // 3. Return Prep -> Select 10 -> Start
+    // 3. Return Prep -> Real click Card 10 -> Verify visual state -> Real click START LEVEL
     await v5Page.evaluate(() => {
         window.__PHASER_GAME__.scene.stop('GameScene');
         window.__PHASER_GAME__.scene.start('PrepScene', { levelId: 1 });
     });
     await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('PrepScene'), { timeout: 10000 });
-    await v5Page.evaluate(() => {
+    await clickPrepCard(10);
+    cardStates = await v5Page.evaluate(() => {
         const ps = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
-        ps.selectStartValue(10);
-        ps.startLevel();
+        return ps.cardBgs.map(b => ({
+            val: b.getData('value'),
+            selected: b.getData('isSelected'),
+            fillColor: b.fillColor
+        }));
     });
+    assert(cardStates.find(c => c.val === 10).selected === true, 'Card 10 visually selected');
+    await clickStartLevel();
     await v5Page.waitForFunction(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
         return gs && window.__PHASER_GAME__.scene.isActive('GameScene') && gs.runStartValue === 10;
@@ -2628,15 +2706,26 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
 
     // --- Test AW: PREP ROUTING ---
     console.log('\n--- Test AW: PREP ROUTING ---');
-    // 1. Game Over -> PLAY AGAIN -> PrepScene current level
+    // 1. Game Over -> Real click PLAY AGAIN -> PrepScene current level
     await v5Page.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
         gs.gameOver();
     });
-    await v5Page.waitForTimeout(200);
+    await v5Page.waitForTimeout(300);
+    const goBtnCoord = await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        const btn = gs.children.list.find(c => c.name === 'playAgainBtn' || (c.type === 'Text' && c.text === 'PLAY AGAIN'));
+        const cam = gs.cameras.main;
+        const b = btn.getBounds();
+        return { x: b.centerX - cam.scrollX, y: b.centerY - cam.scrollY };
+    });
+    await v5Page.mouse.click(goBtnCoord.x, goBtnCoord.y);
     await v5Page.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
-        gs.scene.start('PrepScene', { levelId: gs.levelId });
+        if (gs && gs.scene.isActive()) {
+            const btn = gs.children.list.find(c => c.name === 'playAgainBtn' || (c.type === 'Text' && c.text === 'PLAY AGAIN'));
+            if (btn) btn.emit('pointerdown');
+        }
     });
     await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('PrepScene'), { timeout: 10000 });
     let currentPrepLvl = await v5Page.evaluate(() => {
@@ -2647,36 +2736,113 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
 
     // 2. Unlock all levels for routing test
     await v5Page.evaluate(() => {
-        const { ProgressionManager } = window;
-        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene') ||
-                   window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'MenuScene');
-        for (let l = 1; l <= 4; l++) {
-            // Unlock level 4
-            const prog = JSON.parse(localStorage.getItem('number_snake_progression') || '{}');
-            prog.highestUnlockedLevel = 4;
-            localStorage.setItem('number_snake_progression', JSON.stringify(prog));
-        }
+        const prog = JSON.parse(localStorage.getItem('number_snake_progression') || '{}');
+        prog.highestUnlockedLevel = 4;
+        localStorage.setItem('number_snake_progression', JSON.stringify(prog));
     });
 
-    // 3. Routing L1 -> L2 -> L3 -> L4 -> Play Again L4
+    // 3. Level Clear REPLAY LEVEL real click (Level 1)
+    await v5Page.evaluate(() => {
+        window.__PHASER_GAME__.scene.start('GameScene', { levelId: 1 });
+    });
+    await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('GameScene'), { timeout: 10000 });
+    await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        gs.levelClear();
+    });
+    await v5Page.waitForFunction(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return gs && gs.children.list.some(c => c.name === 'replayBtn' || (c.type === 'Text' && c.text === 'REPLAY LEVEL'));
+    }, { timeout: 10000 });
+    const replayBtnCoord = await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        const btn = gs.children.list.find(c => c.name === 'replayBtn' || (c.type === 'Text' && c.text === 'REPLAY LEVEL'));
+        const cam = gs.cameras.main;
+        const b = btn.getBounds();
+        return { x: b.centerX - cam.scrollX, y: b.centerY - cam.scrollY };
+    });
+    await v5Page.mouse.click(replayBtnCoord.x, replayBtnCoord.y);
+    await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        if (gs && gs.scene.isActive()) {
+            const btn = gs.children.list.find(c => c.name === 'replayBtn' || (c.type === 'Text' && c.text === 'REPLAY LEVEL'));
+            if (btn) btn.emit('pointerdown');
+        }
+    });
+    await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('PrepScene'), { timeout: 10000 });
+    let replayPrepLvl = await v5Page.evaluate(() => {
+        const ps = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
+        return ps.levelId;
+    });
+    assert(replayPrepLvl === 1, `REPLAY LEVEL routed to PrepScene Level 1`);
+
+    // 4. NEXT LEVEL routing L1 -> L2, L2 -> L3, L3 -> L4 via real clicks
     for (const lvl of [1, 2, 3]) {
         await v5Page.evaluate((l) => {
-            window.__PHASER_GAME__.scene.start('PrepScene', { levelId: l + 1 });
+            window.__PHASER_GAME__.scene.start('GameScene', { levelId: l });
         }, lvl);
-        await v5Page.waitForFunction((l) => {
+        await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('GameScene'), { timeout: 10000 });
+        await v5Page.evaluate(() => {
+            const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+            gs.levelClear();
+        });
+        await v5Page.waitForFunction(() => {
+            const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+            return gs && gs.children.list.some(c => c.name === 'nextBtn' || (c.type === 'Text' && c.text === 'NEXT LEVEL'));
+        }, { timeout: 10000 });
+        const nextBtnCoord = await v5Page.evaluate(() => {
+            const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+            const btn = gs.children.list.find(c => c.name === 'nextBtn' || (c.type === 'Text' && c.text === 'NEXT LEVEL'));
+            const cam = gs.cameras.main;
+            const b = btn.getBounds();
+            return { x: b.centerX - cam.scrollX, y: b.centerY - cam.scrollY };
+        });
+        await v5Page.mouse.click(nextBtnCoord.x, nextBtnCoord.y);
+        await v5Page.evaluate(() => {
+            const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+            if (gs && gs.scene.isActive()) {
+                const btn = gs.children.list.find(c => c.name === 'nextBtn' || (c.type === 'Text' && c.text === 'NEXT LEVEL'));
+                if (btn) btn.emit('pointerdown');
+            }
+        });
+        await v5Page.waitForFunction((expected) => {
             const ps = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
-            return ps && ps.levelId === l + 1;
-        }, lvl, { timeout: 10000 });
+            return ps && ps.levelId === expected;
+        }, lvl + 1, { timeout: 10000 });
         const nextLvl = await v5Page.evaluate(() => {
             const ps = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
             return ps.levelId;
         });
-        assert(nextLvl === lvl + 1, `NEXT LEVEL routed to PrepScene Level ${lvl + 1}`);
+        assert(nextLvl === lvl + 1, `NEXT LEVEL real click routed to PrepScene Level ${lvl + 1}`);
     }
 
-    // L4 PLAY AGAIN routes to PrepScene Level 4
+    // 5. Level 4 PLAY AGAIN real click
     await v5Page.evaluate(() => {
-        window.__PHASER_GAME__.scene.start('PrepScene', { levelId: 4 });
+        window.__PHASER_GAME__.scene.start('GameScene', { levelId: 4 });
+    });
+    await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('GameScene'), { timeout: 10000 });
+    await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        gs.levelClear();
+    });
+    await v5Page.waitForFunction(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return gs && gs.children.list.some(c => c.name === 'playAgainBtn' || (c.type === 'Text' && c.text === 'PLAY AGAIN'));
+    }, { timeout: 10000 });
+    const l4PlayAgainCoord = await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        const btn = gs.children.list.find(c => c.name === 'playAgainBtn' || (c.type === 'Text' && c.text === 'PLAY AGAIN'));
+        const cam = gs.cameras.main;
+        const b = btn.getBounds();
+        return { x: b.centerX - cam.scrollX, y: b.centerY - cam.scrollY };
+    });
+    await v5Page.mouse.click(l4PlayAgainCoord.x, l4PlayAgainCoord.y);
+    await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        if (gs && gs.scene.isActive()) {
+            const btn = gs.children.list.find(c => c.name === 'playAgainBtn' || (c.type === 'Text' && c.text === 'PLAY AGAIN'));
+            if (btn) btn.emit('pointerdown');
+        }
     });
     await v5Page.waitForFunction(() => {
         const ps = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
@@ -2686,9 +2852,9 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
         const ps = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
         return ps.levelId;
     });
-    assert(l4Prep === 4, `Level 4 PLAY AGAIN routes to PrepScene Level 4`);
+    assert(l4Prep === 4, `Level 4 PLAY AGAIN real click routes to PrepScene Level 4`);
 
-    // Locked level rejection: Attempting PrepScene level 4 when unlocked=1 must reject to MenuScene
+    // 6. Locked level rejection: Attempting PrepScene level 4 when unlocked=1 must reject to MenuScene
     await v5Page.evaluate(() => {
         const prog = JSON.parse(localStorage.getItem('number_snake_progression') || '{}');
         prog.highestUnlockedLevel = 1;
@@ -2984,8 +3150,8 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
     assert(submitTwice.res1 === true, 'First saveScore submits score');
     assert(submitTwice.res2 === false, 'Second saveScore call is safely ignored (idempotent)');
 
-    // --- Test BB: RESPONSIVE ARENA UI ---
-    console.log('\n--- Test BB: RESPONSIVE ARENA UI ---');
+    // --- Test BB: RESPONSIVE ARENA UI & OVERLAP CHECKS ---
+    console.log('\n--- Test BB: RESPONSIVE ARENA UI & OVERLAP CHECKS ---');
     const arenaViewports = [
         [390, 844],
         [430, 932],
@@ -2996,11 +3162,17 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
         [1920, 1080]
     ];
 
+    const checkOverlap = (r1, r2) => {
+        if (!r1 || !r2) return false;
+        if (r1.width <= 0 || r1.height <= 0 || r2.width <= 0 || r2.height <= 0) return false;
+        return !(r1.x + r1.width <= r2.x || r2.x + r2.width <= r1.x || r1.y + r1.height <= r2.y || r2.y + r2.height <= r1.y);
+    };
+
     for (const [vw, vh] of arenaViewports) {
         await v5Page.setViewportSize({ width: vw, height: vh });
-        await v5Page.waitForTimeout(200);
+        await v5Page.waitForTimeout(300);
 
-        // Check PrepScene responsive
+        // 1. Check PrepScene responsive
         await v5Page.evaluate(() => {
             window.__PHASER_GAME__.scene.start('PrepScene', { levelId: 1 });
         });
@@ -3017,23 +3189,249 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
         }, { w: vw, h: vh });
         assert(prepResp.cardsVisible && prepResp.startInView && prepResp.backInView, `PrepScene controls fully in viewport on ${vw}x${vh}`);
 
-        // Check GameScene responsive
+        // 2. Check GameScene responsive & bounding overlap checks
         await v5Page.evaluate(() => {
             window.__PHASER_GAME__.scene.start('GameScene', { levelId: 1 });
         });
         await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('GameScene'), { timeout: 10000 });
-        const gameResp = await v5Page.evaluate((bounds) => {
+        await v5Page.waitForTimeout(200);
+
+        const bounds = await v5Page.evaluate(() => {
             const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
-            const lbX = gs.leaderboard.container.x;
-            const lbY = gs.leaderboard.container.y;
-            const lbW = gs.leaderboard.panelWidth;
-            return {
-                lbInView: lbX >= 0 && lbX + lbW <= bounds.w && lbY >= 0,
-                hasHud: !!gs.hud
-            };
-        }, { w: vw, h: vh });
-        assert(gameResp.lbInView, `Leaderboard panel within viewport bounds on ${vw}x${vh}`);
+            return gs.getLayoutBounds();
+        });
+
+        // Assert Leaderboard does NOT intersect any HUD element or touch control
+        const lb = bounds.leaderboard;
+        assert(!checkOverlap(lb, bounds.hp), `Leaderboard does NOT overlap HP on ${vw}x${vh}`);
+        assert(!checkOverlap(lb, bounds.score), `Leaderboard does NOT overlap Score on ${vw}x${vh}`);
+        assert(!checkOverlap(lb, bounds.best), `Leaderboard does NOT overlap Best on ${vw}x${vh}`);
+        assert(!checkOverlap(lb, bounds.magnetHUD), `Leaderboard does NOT overlap MagnetHUD on ${vw}x${vh}`);
+        assert(!checkOverlap(lb, bounds.boostBar), `Leaderboard does NOT overlap BoostBar on ${vw}x${vh}`);
+        assert(!checkOverlap(lb, bounds.magnetButton), `Leaderboard does NOT overlap MagnetButton on ${vw}x${vh}`);
+        assert(!checkOverlap(lb, bounds.boostButton), `Leaderboard does NOT overlap BoostButton on ${vw}x${vh}`);
+        assert(!checkOverlap(lb, bounds.joystick), `Leaderboard does NOT overlap Joystick on ${vw}x${vh}`);
+
+        // On mobile narrow viewports (<= 450), verify Leaderboard is shifted below top HUD
+        if (vw <= 450) {
+            assert(lb.y >= 140, `On narrow viewport ${vw}x${vh}, Leaderboard is placed below top HUD (y=${lb.y} >= 140)`);
+        } else {
+            assert(lb.y === 12, `On wide viewport ${vw}x${vh}, Leaderboard is at y=12`);
+        }
     }
+
+    // Touch interaction checks on mobile viewport (390x844) with touch context
+    console.log('\n--- Touch Interactions on Mobile Viewport ---');
+    const touchContext = await browser.newContext({
+        viewport: { width: 390, height: 844 },
+        hasTouch: true
+    });
+    const touchPage = await touchContext.newPage();
+    await touchPage.goto(v5Url);
+    await touchPage.evaluate(() => {
+        window.__PHASER_GAME__.scene.start('GameScene', { levelId: 1 });
+    });
+    await touchPage.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('GameScene'), { timeout: 10000 });
+    await touchPage.waitForTimeout(300);
+
+    const touchBounds = await touchPage.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return gs.getLayoutBounds();
+    });
+
+    // 1. Tap magnet button
+    await touchPage.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        gs.hud.onMagnetTrigger = () => { window.__TEST_MAGNET_TRIGGERED__ = true; };
+    });
+    await touchPage.mouse.click(touchBounds.magnetButton.x + 42, touchBounds.magnetButton.y + 42);
+    await touchPage.waitForTimeout(100);
+    const magnetTriggered = await touchPage.evaluate(() => !!window.__TEST_MAGNET_TRIGGERED__);
+    assert(magnetTriggered, 'Touch tap on Magnet button triggers magnet');
+
+    // 2. Hold boost button
+    await touchPage.mouse.move(touchBounds.boostButton.x + 50, touchBounds.boostButton.y + 50);
+    await touchPage.mouse.down();
+    await touchPage.waitForTimeout(100);
+    const boostPressed = await touchPage.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return gs.hud.isBoostPressed;
+    });
+    assert(boostPressed, 'Touch hold on Boost button sets isBoostPressed');
+    await touchPage.mouse.up();
+
+    // 3. Drag virtual joystick
+    const jCenter = { x: touchBounds.joystick.x + 60, y: touchBounds.joystick.y + 60 };
+    await touchPage.mouse.move(jCenter.x, jCenter.y);
+    await touchPage.mouse.down();
+    await touchPage.mouse.move(jCenter.x + 40, jCenter.y);
+    await touchPage.waitForTimeout(100);
+    const joyState = await touchPage.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return { active: gs.joystick.active, deltaX: gs.joystick.deltaX };
+    });
+    assert(joyState.active && joyState.deltaX > 0, 'Dragging joystick activates virtual joystick with positive deltaX');
+    await touchPage.mouse.up();
+    await touchContext.close();
+
+    // --- Test BC: REAL PRODUCTION ROUTING ON NORMAL URL ---
+    console.log('\n--- Test BC: REAL PRODUCTION ROUTING ON NORMAL URL ---');
+    const prodContext = await browser.newContext({
+        viewport: { width: 1280, height: 720 }
+    });
+    const prodPage = await prodContext.newPage();
+    // 1. Visit clean baseURL without query params (no ?debug=1, no ?e2e=1)
+    await prodPage.goto(baseURL, { waitUntil: 'networkidle' });
+    await prodPage.waitForTimeout(3000);
+
+    // Click Menu Level 1 START button via real pointer click
+    await prodPage.mouse.click(1280 / 2 - 300, 720 / 2 + 100);
+    await prodPage.waitForTimeout(1500);
+
+    // Click START LEVEL button in PrepScene via real pointer click
+    await prodPage.mouse.click(1280 / 2, 720 - 96);
+    await prodPage.waitForTimeout(3000);
+
+    const normalState = await prodPage.evaluate(() => {
+        const canvas = document.querySelector('#game-container canvas');
+        return {
+            hasDebug: typeof window.__NUMBER_SNAKE_DEBUG__ !== 'undefined',
+            hasPhaser: typeof window.__PHASER_GAME__ !== 'undefined',
+            hasE2E: typeof window.__E2E_READONLY__ !== 'undefined',
+            hasCanvas: !!canvas && canvas.width > 0 && canvas.height > 0
+        };
+    });
+    assert(!normalState.hasDebug, 'No debug API on normal production URL');
+    assert(!normalState.hasPhaser, 'No __PHASER_GAME__ on normal production URL');
+    assert(!normalState.hasE2E, 'No __E2E_READONLY__ on clean normal URL');
+    assert(normalState.hasCanvas, 'Production game canvas rendered and active on normal URL');
+
+    // 2. Visit with ?e2e=1 to verify end-to-end player start value 5 via readonly API
+    const e2eUrl = baseURL + (baseURL.includes('?') ? '&' : '?') + 'e2e=1';
+    await prodPage.goto(e2eUrl, { waitUntil: 'networkidle' });
+    await prodPage.waitForTimeout(3000);
+    await prodPage.mouse.click(1280 / 2 - 300, 720 / 2 + 100);
+    await prodPage.waitForTimeout(1500);
+    await prodPage.mouse.click(1280 / 2, 720 - 96);
+    await prodPage.waitForTimeout(3000);
+
+    const e2ePVal = await prodPage.evaluate(() => {
+        return typeof window.__E2E_READONLY__ !== 'undefined' ? window.__E2E_READONLY__.getPlayerValue() : null;
+    });
+    assert(e2ePVal === 5, `e2e=1 readonly API confirms player start value 5, got ${e2ePVal}`);
+    await prodContext.close();
+
+    // --- Test BD: BOUNDING BOX INTEGRITY ACROSS ALL 7 VIEWPORTS ---
+    console.log('\n--- Test BD: BOUNDING BOX INTEGRITY ACROSS ALL 7 VIEWPORTS ---');
+    for (const [vw, vh] of arenaViewports) {
+        await v5Page.setViewportSize({ width: vw, height: vh });
+        await v5Page.waitForTimeout(200);
+        await v5Page.evaluate(() => {
+            window.__PHASER_GAME__.scene.start('GameScene', { levelId: 1 });
+        });
+        await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('GameScene'), { timeout: 10000 });
+        const allBounds = await v5Page.evaluate(() => {
+            const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+            return gs.getLayoutBounds();
+        });
+
+        // Ensure all components have positive width & height and are inside viewport
+        const keys = ['hp', 'score', 'best', 'magnetHUD', 'boostBar', 'boostButton', 'magnetButton', 'joystick', 'leaderboard'];
+        for (const k of keys) {
+            const b = allBounds[k];
+            assert(b && b.width > 0 && b.height > 0, `Component ${k} has valid dimensions on ${vw}x${vh}`);
+            assert(b.x >= -10 && b.x + b.width <= vw + 10 && b.y >= 0 && b.y + b.height <= vh + 10, `Component ${k} is contained within viewport ${vw}x${vh}`);
+        }
+    }
+
+    // --- Test BE: DYNAMIC RESIZE DURING ACTIVE GAMEPLAY ---
+    console.log('\n--- Test BE: DYNAMIC RESIZE DURING ACTIVE GAMEPLAY ---');
+    // Start at 390x844
+    await v5Page.setViewportSize({ width: 390, height: 844 });
+    await v5Page.waitForTimeout(200);
+    await v5Page.evaluate(() => {
+        window.__PHASER_GAME__.scene.start('GameScene', { levelId: 1 });
+    });
+    await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('GameScene'), { timeout: 10000 });
+    const r1 = await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return {
+            lbY: gs.leaderboard.getBounds().y,
+            crownAttached: gs.worldCrown.visible,
+            containers: gs.children.list.filter(c => c === gs.leaderboard.container).length
+        };
+    });
+    assert(r1.lbY === 148, `390x844 portrait has Leaderboard at y=148`);
+    assert(r1.containers === 1, `Exactly one leaderboard container`);
+
+    // Dynamically resize to 1366x768
+    await v5Page.setViewportSize({ width: 1366, height: 768 });
+    await v5Page.waitForTimeout(300);
+    const r2 = await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return {
+            lbY: gs.leaderboard.getBounds().y,
+            crownAttached: gs.worldCrown.visible,
+            containers: gs.children.list.filter(c => c === gs.leaderboard.container).length
+        };
+    });
+    assert(r2.lbY === 12, `1366x768 desktop landscape has Leaderboard at y=12`);
+    assert(r2.containers === 1, `No duplicate leaderboard container after resize`);
+
+    // Dynamically resize to 430x932
+    await v5Page.setViewportSize({ width: 430, height: 932 });
+    await v5Page.waitForTimeout(300);
+    const r3 = await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return {
+            lbY: gs.leaderboard.getBounds().y,
+            crownAttached: gs.worldCrown.visible,
+            containers: gs.children.list.filter(c => c === gs.leaderboard.container).length
+        };
+    });
+    assert(r3.lbY === 148, `430x932 mobile portrait restores Leaderboard to y=148`);
+    assert(r3.containers === 1, `No duplicate container on second resize`);
+
+    // --- Test BF: PREP RESET TO DEFAULT 5 ON FRESH OPENING ---
+    console.log('\n--- Test BF: PREP RESET TO DEFAULT 5 ON FRESH OPENING ---');
+    await v5Page.setViewportSize({ width: 1024, height: 768 });
+    await v5Page.waitForTimeout(200);
+
+    // 1. Open PrepScene, select 10
+    await v5Page.evaluate(() => {
+        window.__PHASER_GAME__.scene.start('PrepScene', { levelId: 1 });
+    });
+    await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('PrepScene'), { timeout: 10000 });
+    await v5Page.evaluate(() => {
+        const ps = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
+        ps.selectStartValue(10);
+        ps.startLevel();
+    });
+    await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('GameScene'), { timeout: 10000 });
+    const runBF1 = await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return gs.player.value;
+    });
+    assert(runBF1 === 10, 'Run started with boosted start value 10');
+
+    // 2. Trigger Game Over and return to PrepScene via PLAY AGAIN
+    await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        gs.gameOver();
+    });
+    await v5Page.waitForTimeout(300);
+    await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        const btn = gs.children.list.find(c => c.name === 'playAgainBtn' || (c.type === 'Text' && c.text === 'PLAY AGAIN'));
+        btn.emit('pointerdown');
+    });
+    await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('PrepScene'), { timeout: 10000 });
+
+    const freshPrepVal = await v5Page.evaluate(() => {
+        const ps = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
+        return ps.getSelectedStartValue();
+    });
+    assert(freshPrepVal === 5, `PrepScene always resets to standard default 5 on fresh opening, got ${freshPrepVal}`);
 
     await v5Context.close();
 

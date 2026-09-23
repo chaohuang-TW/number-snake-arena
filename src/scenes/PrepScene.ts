@@ -4,24 +4,25 @@ import { getLevel, type LevelDefinition } from '../config/levels';
 import { CosmeticsManager } from '../models/Cosmetics';
 import { HEAD_SKINS } from '../config/headSkins';
 import { type PrepStartValue, normalizeStartValue } from '../utils/prepValues';
+import { t } from '../i18n';
 
 export class PrepScene extends Phaser.Scene {
-    private levelId: number = 1;
+    public levelId: number = 1;
     private levelDef!: LevelDefinition;
     private selectedStartValue: PrepStartValue = 5;
 
-    private titleText!: Phaser.GameObjects.Text;
-    private levelSubText!: Phaser.GameObjects.Text;
+    public titleText!: Phaser.GameObjects.Text;
+    public levelSubText!: Phaser.GameObjects.Text;
     private infoContainer!: Phaser.GameObjects.Container;
-    private startValueHeading!: Phaser.GameObjects.Text;
+    public startValueHeading!: Phaser.GameObjects.Text;
 
-    private cardContainers: Phaser.GameObjects.Container[] = [];
-    private cardBgs: Phaser.GameObjects.Rectangle[] = [];
+    public cardContainers: Phaser.GameObjects.Container[] = [];
+    public cardBgs: Phaser.GameObjects.Rectangle[] = [];
 
-    private startLevelBtnBg!: Phaser.GameObjects.Rectangle;
-    private startLevelBtnText!: Phaser.GameObjects.Text;
-    private backBtnBg!: Phaser.GameObjects.Rectangle;
-    private backBtnText!: Phaser.GameObjects.Text;
+    public startLevelBtnBg!: Phaser.GameObjects.Rectangle;
+    public startLevelBtnText!: Phaser.GameObjects.Text;
+    public backBtnBg!: Phaser.GameObjects.Rectangle;
+    public backBtnText!: Phaser.GameObjects.Text;
 
     constructor() {
         super('PrepScene');
@@ -47,13 +48,14 @@ export class PrepScene extends Phaser.Scene {
         const cx = this.scale.width / 2;
         const h = this.scale.height;
 
-        this.titleText = this.add.text(cx, 40, 'PRE-BATTLE', {
+        this.titleText = this.add.text(cx, 40, t('prepTitle'), {
             fontSize: '34px',
             fontStyle: 'bold',
             color: '#00ffff'
         }).setOrigin(0.5);
 
-        this.levelSubText = this.add.text(cx, 80, `${this.levelDef.name}`, {
+        const levelTitleStr = t(`level_${this.levelId}`);
+        this.levelSubText = this.add.text(cx, 80, levelTitleStr, {
             fontSize: '22px',
             fontStyle: 'bold',
             color: '#ffffff'
@@ -63,7 +65,7 @@ export class PrepScene extends Phaser.Scene {
         this.createInfoSection(cx, 120);
 
         // Heading for Start Value
-        this.startValueHeading = this.add.text(cx, 175, 'START VALUE', {
+        this.startValueHeading = this.add.text(cx, 175, t('startValueHeading'), {
             fontSize: '18px',
             fontStyle: 'bold',
             color: '#ffd700'
@@ -92,19 +94,19 @@ export class PrepScene extends Phaser.Scene {
         const infoBg = this.add.rectangle(0, 0, 360, 48, 0x05152a, 0.8)
             .setStrokeStyle(1.5, 0x0088cc);
 
-        const bossInfo = this.add.text(-120, 0, `BOSS: ${this.levelDef.bossValue}`, {
+        const bossInfo = this.add.text(-120, 0, t('bossInfo', { value: this.levelDef.bossValue }), {
             fontSize: '14px',
             fontStyle: 'bold',
             color: '#ff5555'
         }).setOrigin(0.5);
 
-        const hpInfo = this.add.text(0, 0, `HP: ${maxHP}`, {
+        const hpInfo = this.add.text(0, 0, t('hpInfo', { value: maxHP }), {
             fontSize: '14px',
             fontStyle: 'bold',
             color: '#ff3366'
         }).setOrigin(0.5);
 
-        const skinInfo = this.add.text(110, 0, `SKIN: ${skinDef.displayName}`, {
+        const skinInfo = this.add.text(110, 0, t('skinInfo', { value: skinDef.displayName }), {
             fontSize: '14px',
             fontStyle: 'bold',
             color: '#00ffcc'
@@ -119,9 +121,9 @@ export class PrepScene extends Phaser.Scene {
         this.cardBgs = [];
 
         const options: { label: string; value: PrepStartValue; desc: string }[] = [
-            { label: 'STANDARD', value: 5, desc: 'Original' },
-            { label: 'BOOST', value: 7, desc: '+2 Start' },
-            { label: 'POWER', value: 10, desc: '+5 Start' }
+            { label: t('standardLabel'), value: 5, desc: t('standardDesc') },
+            { label: t('boostLabel'), value: 7, desc: t('boostDesc') },
+            { label: t('powerLabel'), value: 10, desc: t('powerDesc') }
         ];
 
         const w = this.scale.width;
@@ -192,7 +194,7 @@ export class PrepScene extends Phaser.Scene {
             .setStrokeStyle(2, 0x00ff88)
             .setInteractive({ useHandCursor: true });
         this.startLevelBtnBg.setName('startLevelBtn');
-        this.startLevelBtnText = this.add.text(cx, btnY - 26, 'START LEVEL', {
+        this.startLevelBtnText = this.add.text(cx, btnY - 26, t('startLevelBtn'), {
             fontSize: '20px',
             fontStyle: 'bold',
             color: '#ffffff'
@@ -207,7 +209,7 @@ export class PrepScene extends Phaser.Scene {
             .setStrokeStyle(1.5, 0x6688aa)
             .setInteractive({ useHandCursor: true });
         this.backBtnBg.setName('backBtn');
-        this.backBtnText = this.add.text(cx, btnY + 28, 'BACK', {
+        this.backBtnText = this.add.text(cx, btnY + 28, t('backBtn'), {
             fontSize: '15px',
             fontStyle: 'bold',
             color: '#ffffff'

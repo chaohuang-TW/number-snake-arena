@@ -223,6 +223,23 @@ export class PlayerSnake {
         this.updateBodySprites();
     }
 
+    teleport(x: number, y: number) {
+        this.head.setPosition(x, y);
+        if (this.head.body) {
+            (this.head.body as Phaser.Physics.Arcade.Body).reset(x, y);
+            this.head.setVelocity(0, 0);
+        }
+        this.history = [];
+        const maxHistory = Math.max(30, this.segments * 3);
+        for (let i = 0; i < maxHistory; i++) {
+            this.history.push({ x, y });
+        }
+        for (const spr of this.bodySprites) {
+            spr.setPosition(x, y);
+        }
+        this.valueText.setPosition(x, y);
+    }
+
     destroy() {
         this.head.destroy();
         this.valueText.destroy();

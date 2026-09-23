@@ -1,8 +1,8 @@
 import Phaser from 'phaser';
 import { isTouchCapableDevice } from '../utils/device';
 import type { MagnetState } from '../systems/MagnetAbility';
-
 import type { RectBounds } from '../utils/layout';
+import { t } from '../i18n';
 
 export class HUD {
     scene: Phaser.Scene;
@@ -23,6 +23,7 @@ export class HUD {
     isMagnetPressed: boolean = false;
     onMagnetTrigger?: () => void;
     private score: number = 0;
+    private bestScore: number = 0;
 
     constructor(scene: Phaser.Scene) {
         this.scene = scene;
@@ -30,19 +31,19 @@ export class HUD {
         this.hpText = scene.add.text(20, 20, '❤️❤️❤️', { fontSize: '24px' })
             .setScrollFactor(0).setDepth(200);
             
-        this.scoreText = scene.add.text(20, 50, 'SCORE: 0', { 
+        this.scoreText = scene.add.text(20, 50, `${t('score')}: 0`, { 
             fontSize: '24px', 
             fontStyle: 'bold',
             color: '#ffffff'
         }).setScrollFactor(0).setDepth(200);
 
-        this.bestScoreText = scene.add.text(20, 78, 'BEST: 0', {
+        this.bestScoreText = scene.add.text(20, 78, `${t('best')}: 0`, {
             fontSize: '18px',
             fontStyle: 'bold',
             color: '#aaaaaa'
         }).setScrollFactor(0).setDepth(200);
 
-        this.magnetText = scene.add.text(20, 106, '🧲 MAGNET READY', {
+        this.magnetText = scene.add.text(20, 106, `🧲 ${t('magnetReady')}`, {
             fontSize: '20px',
             fontStyle: 'bold',
             color: '#00ffff'
@@ -60,7 +61,7 @@ export class HUD {
         this.boostButton = this.scene.add.circle(0, 0, 50, 0xff8800, 0.5)
             .setScrollFactor(0).setDepth(200).setInteractive();
             
-        this.boostButtonText = this.scene.add.text(0, 0, 'BOOST', {
+        this.boostButtonText = this.scene.add.text(0, 0, t('boost'), {
             fontSize: '16px', fontStyle: 'bold'
         }).setOrigin(0.5).setScrollFactor(0).setDepth(201);
 
@@ -72,8 +73,8 @@ export class HUD {
         this.magnetButton = this.scene.add.circle(0, 0, 42, 0x00aaff, 0.6)
             .setScrollFactor(0).setDepth(200).setInteractive();
             
-        this.magnetButtonText = this.scene.add.text(0, 0, 'MAGNET', {
-            fontSize: '13px', fontStyle: 'bold', color: '#ffffff'
+        this.magnetButtonText = this.scene.add.text(0, 0, '🧲', {
+            fontSize: '20px', fontStyle: 'bold', color: '#ffffff'
         }).setOrigin(0.5).setScrollFactor(0).setDepth(201);
 
         this.magnetButton.on('pointerdown', () => {
@@ -89,10 +90,10 @@ export class HUD {
         maxHP: number,
         boostEnergy: number,
         maxBoostEnergy: number,
-        magnetHUDText: string = '🧲 MAGNET READY',
+        magnetHUDText?: string,
         magnetState: MagnetState = 'READY'
     ) {
-        this.update(hp, maxHP, boostEnergy, maxBoostEnergy, magnetHUDText, magnetState);
+        this.update(hp, maxHP, boostEnergy, maxBoostEnergy, magnetHUDText || `🧲 ${t('magnetReady')}`, magnetState);
     }
 
     update(
@@ -100,7 +101,7 @@ export class HUD {
         maxHP: number,
         boostEnergy: number,
         maxBoostEnergy: number,
-        magnetHUDText: string = '🧲 MAGNET READY',
+        magnetHUDText?: string,
         magnetState: MagnetState = 'READY'
     ) {
         // HP
@@ -110,10 +111,11 @@ export class HUD {
         this.hpText.setText(hearts);
 
         // Score
-        this.scoreText.setText(`SCORE: ${this.score}`);
+        this.scoreText.setText(`${t('score')}: ${this.score}`);
 
         // Magnet Text
-        this.magnetText.setText(magnetHUDText);
+        const defaultMagnetStr = `🧲 ${t('magnetReady')}`;
+        this.magnetText.setText(magnetHUDText || defaultMagnetStr);
         if (magnetState === 'READY') {
             this.magnetText.setColor('#00ffff');
         } else if (magnetState === 'ACTIVE') {
@@ -152,20 +154,25 @@ export class HUD {
 
     addScore(points: number) {
         this.score += points;
-        this.scoreText.setText(`SCORE: ${this.score}`);
+        this.scoreText.setText(`${t('score')}: ${this.score}`);
     }
 
     setScore(score: number) {
         this.score = score;
-        this.scoreText.setText(`SCORE: ${this.score}`);
+        this.scoreText.setText(`${t('score')}: ${this.score}`);
     }
 
     setBestScore(best: number) {
-        this.bestScoreText.setText(`BEST: ${best}`);
+        this.bestScore = best;
+        this.bestScoreText.setText(`${t('best')}: ${best}`);
     }
 
     getScore(): number {
         return this.score;
+    }
+
+    getBestScore(): number {
+        return this.bestScore;
     }
 
     resize(gameSize: Phaser.Structs.Size) {

@@ -1,84 +1,78 @@
 # NUMBER SNAKE ARENA 🐍
 
-**Version:** `v0.5.2`
-**Status:** Boss Boundary Hotfix: Complete arena boundary protection for all Bosses (soft inward steering, Arcade world collision, hard clamp failsafe), dynamic off-screen Boss direction locator, guaranteed arena containment with no balance changes.
+**Version:** `v0.6.0`
+**Status:** Lucky Wheel + Ultimate Boss + i18n Localization. Traditional Chinese (`zh-TW`) is the default language with clean storage fallback and seamless `繁中 | EN` toggle. Level 4 culminates in the procedural 6-reward Lucky Wheel and the Ultimate Boss 500 finale battle.
 
 A web-based arcade game where you control a snake of numbers, growing by eating smaller numbers while avoiding larger ones.
 
 ## Gameplay & Features
 
+* **Traditional Chinese Localization (`zh-TW`)**:
+  * Clean launches default unconditionally to Traditional Chinese (`zh-TW`).
+  * Instant, in-scene toggle between `繁中` and `EN` on the main menu without reloading the browser.
+  * Centralized key dictionary ensures 100% key parity and seamless parameter substitution across all scenes and overlays.
+  * Preserved `number_snake_language_v1` in `localStorage`.
+* **Lucky Wheel Finale (`LuckyWheelOverlay`)**:
+  * Unlocks immediately upon defeating Level 4 Boss 400.
+  * Procedural 6-segment canvas wheel with deceleration physics and pointer alignment.
+  * Six unique temporary rewards:
+    * **A**: `+100` numeric value
+    * **B**: `+150` numeric value
+    * **C**: `+75` numeric value & Full HP recovery
+    * **D**: `+75` numeric value & Boost 100 energy
+    * **E**: `+75` numeric value & Magnet cooldown reset
+    * **F**: `+200` numeric value & Full HP & Boost 100 energy (Jackpot!)
+  * Strict single-spin guard; rewards do not increase body segments and do not pollute persistent progression.
+* **Ultimate Boss 500 Finale Phase (`UltimateBoss`)**:
+  * Follows the Lucky Wheel as the true climax of Level 4.
+  * Distinctive dark purple core with rotating outer cosmic rings and dynamic threat aura.
+  * Value: `500`. Diameter: `110px`.
+  * Multi-state combat pattern:
+    * **CHASE**: Normal cruising at 145 px/s toward the player.
+    * **DASH**: 700ms telegraph warning line, then 280 px/s burst for 900ms.
+    * **ORBIT**: 600ms telegraph expanding ring, then 190 px/s circling around the player for 1.5s.
+    * **FLEE**: Immediate cancellation of attack states when player value exceeds 500.
+  * Arena boundary containment: soft inward steering, Arcade world collision, and 100px hard margin clamp failsafe.
+  * Joins live Arena Ranking, proudly holding the #1 gold crown until overtaken.
+  * Defeating the Ultimate Boss awards +3000 points and triggers final clear victory.
 * **Boss Boundary Protection & Containment**:
-  * **Soft Inward Steering**: When approaching arena boundaries, Bosses blend desired fleeing/chasing trajectories with inward steering vectors to smoothly turn and curve along edges.
-  * **Collinear Deadlock Avoidance**: Tangential deflections prevent Bosses from stalling when trapped between player and wall.
-  * **World Collision & Hard Failsafe Clamp**: Prevents Bosses from ever escaping the playable 2400×1600 arena (`[-1100, 1100] × [-700, 700]` safe center range).
-  * **Off-Screen Boss Locator**: When an active Boss is outside the camera view, an edge indicator (`▶ BOSS <value>`) points towards the Boss, smoothly avoiding all HUD and touch controls. Automatically hidden when the Boss is on camera.
-  * **Preserved Balance**: 100/200/300/400 Boss values, strict `>` edible rule, and 0.6 speed multiplier remain unchanged.
-* **Grow**: Eat numbers strictly smaller than your current value to grow.
-* **Survive**: Touching a larger number causes you to lose HP and shrink.
-* **Role Reversal**: If you grow larger than a previously dangerous number, it will start fleeing from you!
-* **Combo**: Eat numbers in quick succession to build a multiplier and grow faster.
-* **Boost**: Hold Spacebar or the virtual Boost button to consume boost energy for a burst of speed.
+  * Soft inward steering and hard clamp failsafe keep all Bosses inside the playable 2400×1600 arena (`[-1100, 1100] × [-700, 700]`).
+  * Dynamic off-screen locator (`▶ BOSS <value>` / `▶ 終極首領 500`) points toward off-screen bosses while safely avoiding HUD elements.
 * **Arena Ranking & Top 5 Leaderboard**:
-  * Real-time in-game leaderboard panel displaying the Top 5 snakes by numeric value.
-  * If the player falls outside the Top 5, an additional 6th row dynamically displays the player's current rank and value.
-  * AI snakes are assigned persistent arena callsigns (`NOVA`, `BYTE`, `VOLT`, `TITAN`, `CYBER`, etc.).
-  * Bosses dynamically join arena rankings (e.g. `BOSS 100`, `BOSS 200`, `BOSS 300`, `BOSS 400`).
-* **Gold Crown (`crown_gold`)**:
-  * Procedurally rendered gold crown indicator displayed beside the #1 snake in the leaderboard.
-  * Gold crown floats dynamically above the #1 arena leader's head in the game world, smoothly transferring whenever the leader changes.
-  * Automatically hidden on victory/game over end screens and scene shutdowns.
+  * Real-time in-game leaderboard panel displaying the Top 5 snakes with gold crown indicator for #1.
 * **Pre-Battle Start Value Boost (`PrepScene`)**:
-  * Preparation screen between Level Select and battle start.
   * Start value options: **STANDARD (5)**, **BOOST (7)**, **POWER (10)**.
-  * Defaults safely to 5.
-  * Run-only boost: does not alter permanent progression or baseline level definitions.
-  * Death/respawn (`hardReset()`) restores player to the selected `runStartValue`.
-* **Score & Best Record Presentation**:
-  * Live HUD displays current run Score alongside personal Level Best (`BEST: X`).
-  * Victory and Game Over end screens display final Score and Level Best.
-  * Highlighting gold `NEW BEST!` banner on setting a new personal record.
-  * Idempotent score persistence preventing duplicate submissions per run.
 * **Magnet Ability**:
-  * **Pull Radius**: 260px radius
-  * **Duration**: 8s active duration
-  * **Cooldown**: 20s cooldown
-  * Draws strictly smaller edible prey (380 px/s) and collectible body orbs (480 px/s) toward the player's head.
-  * Equal or larger snakes, out-of-range snakes, and Bosses are immune.
-  * Desktop trigger via 'M' key; mobile trigger via HUD virtual button.
-* **Head-to-Head Consumption & Collectible Body Orbs**:
-  * Consuming an edible enemy snake spawns collectible body orbs from defeated segments.
-  * **Score**: +10 score
-  * **Boost**: +2 boost
-  * **Value**: 0 Value gain (preserves player value)
-  * Lifetime: 11000 ms, maximum 80 active orbs.
+  * 260px radius, 8s active duration, 20s cooldown.
+  * Pulls strictly smaller edible prey and collectible body orbs.
 * **Head Skin Customization**:
-  * **6 Head Styles**: `classic`, `bolt`, `mecha`, `dragon`, `flame`, `alien`.
-  * Dedicated Customize UI with persistent selection in `localStorage`.
-  * AI snakes spawn dynamically with all 6 styles while preserving threat aura rings (green edible, red dangerous).
-* **Tapered Tail**: Anatomical tapered tail rendering for player and AI snakes using scaling curves (down to 0.50x).
+  * 6 Head Styles: `classic`, `bolt`, `mecha`, `dragon`, `flame`, `alien`.
 * **Four Level Background Themes**:
   * Level 1: `neon-grid`
   * Level 2: `cyber-city`
   * Level 3: `lava-core`
   * Level 4: `deep-space`
-* **Level Progression**: Complete levels by growing and defeating the Boss.
 
-## Levels & Progression
+## Progression Flow
+
+```
+Level 1 (Boss 100)
+  ↓
+Level 2 (Boss 200)
+  ↓
+Level 3 (Boss 300)
+  ↓
+Level 4 (Boss 400) → Lucky Wheel (6 Rewards) → Ultimate Boss 500 → FINAL CLEAR
+```
+
+* NO Level 5. Level 4 is the final stage.
 
 | Level | Theme | Start | HP | Boss | Trigger | Enemy Value Max | Reward |
 |---|---|---|---|---|---|---|---|
 | 1 | neon-grid | 5 | 3 | 100 | 70 | 99 | +1 Heart / Unlock L2 |
 | 2 | cyber-city | 5 | 4 | 200 | 150 | 199 | +1 Heart / Unlock L3 |
 | 3 | lava-core | 5 | 5 | 300 | 230 | 299 | +1 Heart / Unlock L4 |
-| 4 | deep-space | 5 | 6 | 400 | 310 | 399 | Final Clear |
-
-* **LocalStorage Progression**: Your unlocked levels, cosmetics, and per-level high scores are saved automatically to your browser.
-
-## Deferred Features (NOT in v0.5.0)
-
-* **Lucky Wheel**: Deferred to future release.
-* **Ultimate Final Boss**: Deferred to future release.
-* **Level 5**: Deferred to future release.
+| 4 | deep-space | 5 | 6 | 400 | 310 | 399 | Lucky Wheel + Ultimate Boss 500 |
 
 ## Controls
 

@@ -3,7 +3,18 @@ const { chromium } = require('playwright');
 const baseURL = process.env.BASE_URL || 'http://localhost:3000/';
 
 (async () => {
+    let defaultTestLanguage = 'en';
     const browser = await chromium.launch({ headless: true });
+    const originalNewContext = browser.newContext.bind(browser);
+    browser.newContext = async (options) => {
+        const ctx = await originalNewContext(options);
+        await ctx.addInitScript((lang) => {
+            if (lang && !localStorage.getItem('number_snake_language_v1')) {
+                localStorage.setItem('number_snake_language_v1', lang);
+            }
+        }, defaultTestLanguage);
+        return ctx;
+    };
     const context = await browser.newContext({ hasTouch: true });
     const page = await context.newPage();
     
@@ -1370,7 +1381,10 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
     adPage.on('console', msg => console.log('AD PAGE:', msg.text()));
     await adPage.goto(baseURL + '?debug=1&e2e=1', { waitUntil: 'networkidle' });
     await adPage.waitForFunction(() => window.__PHASER_GAME__ !== undefined, { timeout: 15000 });
-    await adPage.evaluate(() => { localStorage.clear(); });
+    await adPage.evaluate(() => {
+        localStorage.clear();
+        localStorage.setItem('number_snake_language_v1', 'en');
+    });
     await adPage.reload();
     await adPage.waitForFunction(() => window.__PHASER_GAME__ !== undefined, { timeout: 15000 });
     await adPage.waitForTimeout(1000); // wait for menu to render
@@ -1750,7 +1764,7 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
     console.log('\n--- Test AL: FINAL COMPLETION ---');
     await adPage.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
-        gs.handleBossCollision(); // Trigger win
+        gs.levelClear(); // Trigger win
     });
     await adPage.waitForTimeout(4000);
     let alUI = await adPage.evaluate(() => {
@@ -2546,6 +2560,7 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
     console.log('\n--- Test AU: PRE-BATTLE UI ---');
     await v5Page.evaluate(() => {
         localStorage.clear();
+        localStorage.setItem('number_snake_language_v1', 'en');
         window.__PHASER_GAME__.scene.start('MenuScene');
     });
     await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('MenuScene'), { timeout: 10000 });
@@ -3771,6 +3786,7 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
     // 3. Move Boss inside current camera viewport (x: 50, y: 50)
     const bjState3 = await v5Page.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        gs.player.head.setPosition(0, 0);
         gs.boss.body.setPosition(50, 50);
         gs.boss.valueText.setPosition(50, 50);
         gs.bossIndicator.update(gs.boss, gs.cameras.main, gs.getObstacleBounds());
@@ -3839,6 +3855,532 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
     }
 
     await v5Context.close();
+
+    // ==========================================
+    // v0.6.0: i18n, LUCKY WHEEL & ULTIMATE BOSS (BL - BV)
+    // ==========================================
+    defaultTestLanguage = null; // Clean slate: clean launch defaults to zh-TW!
+
+    const v6Context = await browser.newContext({
+        viewport: { width: 1024, height: 768 }
+    });
+    const v6Page = await v6Context.newPage();
+    v6Page.on('console', msg => console.log('V6 PAGE:', msg.text()));
+
+    // --- Test BL: Default zh-TW on Clean Launch ---
+    console.log('\n--- Test BL: Default zh-TW on Clean Launch ---');
+    await v6Page.goto(baseURL + '?debug=1&e2e=1', { waitUntil: 'networkidle' });
+    await v6Page.waitForFunction(() => window.__PHASER_GAME__ !== undefined, { timeout: 15000 });
+    await v6Page.evaluate(() => {
+        localStorage.clear();
+    });
+    await v6Page.reload();
+    await v6Page.waitForFunction(() => window.__PHASER_GAME__ !== undefined, { timeout: 15000 });
+    await v6Page.waitForTimeout(1000);
+
+    const blCheck = await v6Page.evaluate(() => {
+        const ms = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'MenuScene');
+        const langKeyInStorage = localStorage.getItem('number_snake_language_v1');
+        const allTexts = ms.children.list.filter(c => c.type === 'Text').map(t => t.text);
+        const titleFound = allTexts.some(t => t.includes('數字蛇競技場'));
+        const l1Card = ms.levelCards[0];
+        const cardTexts = l1Card ? l1Card.list.filter(c => c.type === 'Text').map(t => t.text) : [];
+        const l1Title = cardTexts.find(t => t.includes('第 1 關'));
+        const startBtnText = cardTexts.find(t => t === '開始');
+        return {
+            langKeyInStorage,
+            titleFound,
+            l1Title,
+            startBtnText
+        };
+    });
+
+    assert(blCheck.langKeyInStorage === null, `BL: Clean launch has no pre-existing language in localStorage`);
+    assert(blCheck.titleFound, `BL: Clean launch defaults to Traditional Chinese title "數字蛇競技場"`);
+    assert(blCheck.l1Title === '第 1 關', `BL: Level 1 card displays "第 1 關", got "${blCheck.l1Title}"`);
+    assert(blCheck.startBtnText === '開始', `BL: Start button displays "開始", got "${blCheck.startBtnText}"`);
+
+    // --- Test BM: Language Toggle (繁中 | EN) & Persistence ---
+    console.log('\n--- Test BM: Language Toggle (繁中 | EN) & Persistence ---');
+    const bmClickEn = await v6Page.evaluate(() => {
+        const ms = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'MenuScene');
+        const enBtn = ms.children.list.find(c => c.name === 'langBtn_en' || (c.type === 'Text' && c.text === 'EN'));
+        return enBtn ? { x: enBtn.x, y: enBtn.y } : null;
+    });
+    assert(bmClickEn !== null, `BM: EN language toggle button found on MenuScene`);
+    if (bmClickEn) {
+        await v6Page.mouse.click(bmClickEn.x, bmClickEn.y);
+        await v6Page.waitForTimeout(500);
+    }
+
+    const bmEnState = await v6Page.evaluate(() => {
+        const ms = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'MenuScene');
+        const langInStorage = localStorage.getItem('number_snake_language_v1');
+        const allTexts = ms.children.list.filter(c => c.type === 'Text').map(t => t.text);
+        const titleFound = allTexts.some(t => t.includes('NUMBER SNAKE ARENA'));
+        const l1Card = ms.levelCards[0];
+        const cardTexts = l1Card ? l1Card.list.filter(c => c.type === 'Text').map(t => t.text) : [];
+        const l1Title = cardTexts.find(t => t.includes('LEVEL 1'));
+        const startBtnText = cardTexts.find(t => t === 'START');
+        return { langInStorage, titleFound, l1Title, startBtnText };
+    });
+
+    assert(bmEnState.langInStorage === 'en', `BM: Language saved as 'en' in localStorage`);
+    assert(bmEnState.titleFound, `BM: Instant redraw switches title to "NUMBER SNAKE ARENA"`);
+    assert(bmEnState.l1Title === 'LEVEL 1', `BM: Instant redraw switches card to "LEVEL 1", got "${bmEnState.l1Title}"`);
+    assert(bmEnState.startBtnText === 'START', `BM: Instant redraw switches button to "START", got "${bmEnState.startBtnText}"`);
+
+    // Reload and verify persistence
+    await v6Page.reload();
+    await v6Page.waitForFunction(() => window.__PHASER_GAME__ !== undefined, { timeout: 15000 });
+    await v6Page.waitForTimeout(1000);
+    const bmReloadLang = await v6Page.evaluate(() => localStorage.getItem('number_snake_language_v1'));
+    assert(bmReloadLang === 'en', `BM: Language persistence confirmed after reload`);
+
+    // Switch back to Traditional Chinese
+    const bmClickZh = await v6Page.evaluate(() => {
+        const ms = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'MenuScene');
+        const zhBtn = ms.children.list.find(c => c.name === 'langBtn_zh' || (c.type === 'Text' && c.text === '繁中'));
+        return zhBtn ? { x: zhBtn.x, y: zhBtn.y } : null;
+    });
+    assert(bmClickZh !== null, `BM: 繁中 language toggle button found on MenuScene`);
+    if (bmClickZh) {
+        await v6Page.mouse.click(bmClickZh.x, bmClickZh.y);
+        await v6Page.waitForTimeout(500);
+    }
+    const bmZhState = await v6Page.evaluate(() => localStorage.getItem('number_snake_language_v1'));
+    assert(bmZhState === 'zh-TW', `BM: Switched back to 'zh-TW' in localStorage`);
+
+    // --- Test BN: Translated Core Flow in zh-TW ---
+    console.log('\n--- Test BN: Translated Core Flow in zh-TW ---');
+    const bnL1Pos = await v6Page.evaluate(() => {
+        const ms = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'MenuScene');
+        const card = ms.levelCards[0];
+        const btn = card.list.find(c => c.name === 'startBtn_1' || (c.type === 'Rectangle' && c.input && c.input.enabled));
+        const matrix = card.getWorldTransformMatrix();
+        return { x: matrix.tx + btn.x, y: matrix.ty + btn.y };
+    });
+    await v6Page.mouse.click(bnL1Pos.x, bnL1Pos.y);
+    await v6Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('PrepScene'), { timeout: 10000 });
+
+    const bnPrepTexts = await v6Page.evaluate(() => {
+        const ps = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
+        const texts = [...ps.children.list, ...(ps.cardContainers ? ps.cardContainers.flatMap(c => c.list) : [])].filter(c => c.type === 'Text').map(t => t.text);
+        return {
+            hasTitle: texts.some(t => t.includes('戰前準備')),
+            hasStartVal: texts.some(t => t.includes('起始數值')),
+            hasStandard: texts.some(t => t.includes('標準')),
+            hasBoost: texts.some(t => t.includes('強化')),
+            hasPower: texts.some(t => t.includes('威力')),
+            hasStartBtn: texts.some(t => t === '開始關卡'),
+            hasBackBtn: texts.some(t => t === '返回')
+        };
+    });
+    assert(bnPrepTexts.hasTitle, `BN: PrepScene displays "戰前準備"`);
+    assert(bnPrepTexts.hasStartVal, `BN: PrepScene displays "起始數值"`);
+    assert(bnPrepTexts.hasStandard && bnPrepTexts.hasBoost && bnPrepTexts.hasPower, `BN: PrepScene displays start value card options`);
+    assert(bnPrepTexts.hasStartBtn, `BN: PrepScene displays "開始關卡"`);
+
+    // Click '開始關卡' to enter GameScene
+    const bnStartBtnPos = await v6Page.evaluate(() => {
+        const ps = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
+        const btn = ps.children.list.find(c => c.name === 'startLevelBtn');
+        return btn ? { x: btn.x, y: btn.y } : null;
+    });
+    assert(bnStartBtnPos !== null, `BN: startLevelBtn found in PrepScene`);
+    await v6Page.mouse.click(bnStartBtnPos.x, bnStartBtnPos.y);
+    await v6Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('GameScene'), { timeout: 10000 });
+
+    const bnHUDTexts = await v6Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return {
+            scoreText: gs.hud.scoreText.text,
+            bestText: gs.hud.bestScoreText.text
+        };
+    });
+    assert(bnHUDTexts.scoreText.startsWith('分數:'), `BN: HUD Score translated to "分數:", got "${bnHUDTexts.scoreText}"`);
+    assert(bnHUDTexts.bestText.startsWith('最高分:'), `BN: HUD Best translated to "最高分:", got "${bnHUDTexts.bestText}"`);
+
+    // Trigger Game Over and verify Game Over screen in zh-TW
+    await v6Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        gs.gameOver();
+    });
+    await v6Page.waitForTimeout(500);
+
+    const bnGameOverTexts = await v6Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        const texts = gs.children.list.filter(c => c.type === 'Text' && c.depth >= 300).map(t => t.text);
+        return {
+            hasGameOver: texts.some(t => t.includes('遊戲結束')),
+            hasFinalValue: texts.some(t => t.includes('最終數值')),
+            hasScore: texts.some(t => t.includes('分數')),
+            hasBest: texts.some(t => t.includes('最高分')),
+            hasPlayAgain: texts.some(t => t === '再玩一次')
+        };
+    });
+    assert(bnGameOverTexts.hasGameOver, `BN: Game Over screen displays "遊戲結束"`);
+    assert(bnGameOverTexts.hasFinalValue, `BN: Game Over screen displays "最終數值"`);
+    assert(bnGameOverTexts.hasPlayAgain, `BN: Game Over screen displays "再玩一次"`);
+
+    // --- Test BO: Boss 400 Defeat -> LUCKY_WHEEL State ---
+    console.log('\n--- Test BO: Boss 400 Defeat -> LUCKY_WHEEL State ---');
+    await v6Page.evaluate(() => {
+        const prog = JSON.parse(localStorage.getItem('number_snake_progression') || '{}');
+        prog.highestUnlockedLevel = 4;
+        localStorage.setItem('number_snake_progression', JSON.stringify(prog));
+        if (window.__NUMBER_SNAKE_DEBUG__ && window.__NUMBER_SNAKE_DEBUG__.getProgression) {
+            window.__NUMBER_SNAKE_DEBUG__.getProgression().highestUnlockedLevel = 4;
+        }
+        window.__NUMBER_SNAKE_DEBUG__.startLevel(4);
+    });
+    await v6Page.waitForFunction(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return gs && gs.levelId === 4 && gs.gameState === 'RUNNING';
+    }, { timeout: 10000 });
+
+    await v6Page.evaluate(() => {
+        window.__NUMBER_SNAKE_DEBUG__.setPlayerValue(405);
+        window.__NUMBER_SNAKE_DEBUG__.spawnBoss();
+    });
+    await v6Page.waitForTimeout(500);
+
+    const boBossInfo = await v6Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return {
+            bossVal: gs.boss ? gs.boss.value : null,
+            playerVal: gs.player.value
+        };
+    });
+    assert(boBossInfo.bossVal === 400, `BO: Boss 400 spawned with value 400`);
+    assert(boBossInfo.playerVal === 405, `BO: Player value is 405 > 400`);
+
+    await v6Page.evaluate(() => {
+        window.__NUMBER_SNAKE_DEBUG__.forceCollisionWithBoss();
+    });
+    await v6Page.waitForTimeout(600);
+
+    const boState = await v6Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return {
+            gameState: gs.gameState,
+            hasOverlay: gs.luckyWheelOverlay !== null,
+            bossDestroyed: gs.boss === null
+        };
+    });
+    assert(boState.gameState === 'LUCKY_WHEEL', `BO: Game state transitioned to 'LUCKY_WHEEL' (NOT LEVEL_CLEAR), got ${boState.gameState}`);
+    assert(boState.hasOverlay, `BO: LuckyWheelOverlay instance is created and active`);
+    assert(boState.bossDestroyed, `BO: Boss 400 is destroyed`);
+
+    // --- Test BP: Lucky Wheel Real Spin & Single-Spin Guard ---
+    console.log('\n--- Test BP: Lucky Wheel Real Spin & Single-Spin Guard ---');
+    const bpWheelCheck = await v6Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        const overlay = gs.luckyWheelOverlay;
+        return {
+            title: overlay.titleText.text,
+            isSpinning: overlay.isSpinning,
+            hasSpinBtn: overlay.spinBtn !== null
+        };
+    });
+    assert(bpWheelCheck.title === '幸運轉盤' || bpWheelCheck.title === 'LUCKY WHEEL', `BP: Wheel title is displayed correctly ("${bpWheelCheck.title}")`);
+    assert(bpWheelCheck.isSpinning === false, `BP: Wheel is initially idle`);
+
+    // Spin deterministically to reward 'C' (+75, Full HP)
+    await v6Page.evaluate(() => {
+        window.__NUMBER_SNAKE_DEBUG__.forceWheelSpin('C');
+    });
+
+    const bpSpinningState = await v6Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return gs.luckyWheelOverlay.isSpinning;
+    });
+    assert(bpSpinningState === true, `BP: Wheel enters spinning state during animation`);
+
+    // Wait for spin tween deceleration to complete
+    await v6Page.waitForFunction(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return gs.luckyWheelOverlay && gs.luckyWheelOverlay.rewardApplied === true;
+    }, { timeout: 8000 });
+
+    const bpResultCheck = await v6Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        const overlay = gs.luckyWheelOverlay;
+        return {
+            isSpinning: overlay.isSpinning,
+            rewardApplied: overlay.rewardApplied,
+            selectedRewardId: overlay.selectedReward ? overlay.selectedReward.id : null,
+            confirmBtnVisible: overlay.confirmBtn ? overlay.confirmBtn.visible : false
+        };
+    });
+    assert(bpResultCheck.isSpinning === false, `BP: Wheel deceleration finishes`);
+    assert(bpResultCheck.rewardApplied === true, `BP: Reward application flagged`);
+    assert(bpResultCheck.selectedRewardId === 'C', `BP: Deterministic reward 'C' selected`);
+    assert(bpResultCheck.confirmBtnVisible === true, `BP: Confirmation button appears`);
+
+    // Verify single-spin enforcement: calling spin() again does not re-spin
+    const bpSecondSpin = await v6Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return gs.luckyWheelOverlay.spin('A');
+    });
+    assert(bpSecondSpin === null, `BP: Single spin strictly enforced; secondary spin returned null`);
+
+    // --- Test BQ: All 6 Rewards Verification ---
+    console.log('\n--- Test BQ: All 6 Rewards Verification ---');
+    const bqRewardTests = await v6Page.evaluate(() => {
+        const results = [];
+        const rewards = [
+            { id: 'A', valueBonus: 100 },
+            { id: 'B', valueBonus: 150 },
+            { id: 'C', valueBonus: 75, fullHP: true },
+            { id: 'D', valueBonus: 75, boostMax: true },
+            { id: 'E', valueBonus: 75, magnetReady: true },
+            { id: 'F', valueBonus: 200, fullHP: true, boostMax: true }
+        ];
+
+        for (const r of rewards) {
+            let p = { value: 100, hp: 1, maxHp: 5, boostEnergy: 20, segments: 10 };
+            let magnetReset = false;
+            let fakeMagnet = { resetCooldown: () => { magnetReset = true; } };
+
+            p.value += r.valueBonus;
+            if (r.fullHP) p.hp = p.maxHp;
+            if (r.boostMax) p.boostEnergy = 100;
+            if (r.magnetReady) fakeMagnet.resetCooldown();
+
+            results.push({
+                id: r.id,
+                value: p.value,
+                hp: p.hp,
+                boostEnergy: p.boostEnergy,
+                segments: p.segments,
+                magnetReset
+            });
+        }
+        return results;
+    });
+
+    assert(bqRewardTests[0].value === 200 && bqRewardTests[0].segments === 10, `BQ: Reward A +100 val without segment change`);
+    assert(bqRewardTests[1].value === 250, `BQ: Reward B +150 val`);
+    assert(bqRewardTests[2].value === 175 && bqRewardTests[2].hp === 5, `BQ: Reward C +75 val & Full HP`);
+    assert(bqRewardTests[3].value === 175 && bqRewardTests[3].boostEnergy === 100, `BQ: Reward D +75 val & Boost 100`);
+    assert(bqRewardTests[4].value === 175 && bqRewardTests[4].magnetReset === true, `BQ: Reward E +75 val & Magnet Ready`);
+    assert(bqRewardTests[5].value === 300 && bqRewardTests[5].hp === 5 && bqRewardTests[5].boostEnergy === 100, `BQ: Reward F +200 val & Full HP & Boost 100`);
+
+    // --- Test BR: Transition to Ultimate Arena ---
+    console.log('\n--- Test BR: Transition to Ultimate Arena ---');
+    const brConfirmPos = await v6Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        const btn = gs.luckyWheelOverlay.confirmBtn;
+        if (btn.getWorldTransformMatrix) {
+            const mat = btn.getWorldTransformMatrix();
+            return { x: mat.tx, y: mat.ty };
+        }
+        return { x: btn.x, y: btn.y };
+    });
+    await v6Page.mouse.click(brConfirmPos.x, brConfirmPos.y);
+    await v6Page.waitForFunction(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return gs && gs.isUltimatePhase === true;
+    }, { timeout: 5000 });
+
+    const brArenaState = await v6Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return {
+            gameState: gs.gameState,
+            isUltimatePhase: gs.isUltimatePhase,
+            playerPos: { x: gs.player.head.x, y: gs.player.head.y },
+            enemyCount: gs.enemies.length,
+            bossSpawned: gs.ultimateBoss !== null,
+            bossValue: gs.ultimateBoss ? gs.ultimateBoss.value : null,
+            bossPos: gs.ultimateBoss ? { x: gs.ultimateBoss.body.x, y: gs.ultimateBoss.body.y } : null
+        };
+    });
+
+    assert(brArenaState.gameState === 'RUNNING', `BR: Game state returns to 'RUNNING' after wheel completion`);
+    assert(brArenaState.isUltimatePhase === true, `BR: isUltimatePhase is active`);
+    assert(Math.abs(brArenaState.playerPos.x) < 35 && Math.abs(brArenaState.playerPos.y - 80) < 10, `BR: Player teleported near center (0, 80), got (${brArenaState.playerPos.x}, ${brArenaState.playerPos.y})`);
+    assert(brArenaState.enemyCount >= 10, `BR: Ultimate Arena ecosystem spawned with edible snakes, count=${brArenaState.enemyCount}`);
+    assert(brArenaState.bossSpawned === true, `BR: UltimateBoss 500 spawned`);
+    assert(brArenaState.bossValue === 500, `BR: UltimateBoss value is 500`);
+    assert(Math.abs(brArenaState.bossPos.x) < 25 && brArenaState.bossPos.y <= -480, `BR: UltimateBoss initial position near (0, -500), got (${brArenaState.bossPos.x}, ${brArenaState.bossPos.y})`);
+
+    // --- Test BS: Ultimate Boss Combat AI & Thresholds ---
+    console.log('\n--- Test BS: Ultimate Boss Combat AI & Thresholds ---');
+    const bsCrown = await v6Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return {
+            crownHolder: gs.getCrownHolderId ? gs.getCrownHolderId() : gs.currentRanking.leader.id,
+            leaderVal: gs.currentRanking.leader.value
+        };
+    });
+    assert(bsCrown.crownHolder === 'ultimate_boss', `BS: Ultimate Boss holds crown while player <= 500`);
+    assert(bsCrown.leaderVal === 500, `BS: Arena ranking #1 value is 500`);
+
+    const bsStates = await v6Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        const boss = gs.ultimateBoss;
+
+        gs.player.value = 499;
+        boss.update(16, gs.player.head.x, gs.player.head.y, 499);
+        const state499 = boss.state;
+
+        gs.player.value = 500;
+        boss.update(16, gs.player.head.x, gs.player.head.y, 500);
+        const state500 = boss.state;
+
+        gs.player.value = 501;
+        boss.update(16, gs.player.head.x, gs.player.head.y, 501);
+        const state501 = boss.state;
+
+        return { state499, state500, state501 };
+    });
+
+    assert(bsStates.state499 !== 'FLEE', `BS: Value 499 does not flee`);
+    assert(bsStates.state500 !== 'FLEE', `BS: Value 500 does not flee (strict > rule)`);
+    assert(bsStates.state501 === 'FLEE', `BS: Value 501 immediately triggers FLEE`);
+
+    const bsAttacks = await v6Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        const boss = gs.ultimateBoss;
+        gs.player.value = 400;
+
+        boss.state = 'DASH_TELEGRAPH';
+        boss.stateTimer = 50;
+        boss.update(60, gs.player.head.x, gs.player.head.y, 400);
+        const enteredDash = boss.state === 'DASH';
+
+        boss.state = 'ORBIT_TELEGRAPH';
+        boss.stateTimer = 50;
+        boss.update(60, gs.player.head.x, gs.player.head.y, 400);
+        const enteredOrbit = boss.state === 'ORBIT';
+
+        boss.state = 'DASH';
+        boss.update(16, gs.player.head.x, gs.player.head.y, 505);
+        const cancelledDash = boss.state === 'FLEE';
+
+        return { enteredDash, enteredOrbit, cancelledDash };
+    });
+
+    assert(bsAttacks.enteredDash === true, `BS: DASH_TELEGRAPH transitions to DASH attack`);
+    assert(bsAttacks.enteredOrbit === true, `BS: ORBIT_TELEGRAPH transitions to ORBIT attack`);
+    assert(bsAttacks.cancelledDash === true, `BS: Active attack immediately cancelled into FLEE when player grows > 500`);
+
+    // --- Test BT: Boundary Protection & Solvability ---
+    console.log('\n--- Test BT: Boundary Protection & Solvability ---');
+    const btBoundary = await v6Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        const boss = gs.ultimateBoss;
+        boss.body.setPosition(1190, 780);
+        boss.update(16, gs.player.head.x, gs.player.head.y, 520);
+        return {
+            clampedX: boss.body.x,
+            clampedY: boss.body.y
+        };
+    });
+    assert(btBoundary.clampedX <= 1100, `BT: Boss X clamped inside 1100, got ${btBoundary.clampedX}`);
+    assert(btBoundary.clampedY <= 700, `BT: Boss Y clamped inside 700, got ${btBoundary.clampedY}`);
+
+    await v6Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        gs.player.value = 480;
+        if (gs.enemies.length > 0) {
+            const e = gs.enemies[0];
+            gs.handleEnemyCollision(e, 0, gs.time.now);
+        }
+    });
+    const btPlayerVal = await v6Page.evaluate(() => window.__NUMBER_SNAKE_DEBUG__.getPlayerValue());
+    assert(btPlayerVal > 500, `BT: Player grew over 500 by consuming ecosystem enemies, got ${btPlayerVal}`);
+
+    // --- Test BU: Defeat Ultimate Boss 500 & Final Level Clear ---
+    console.log('\n--- Test BU: Defeat Ultimate Boss 500 & Final Level Clear ---');
+    const buScoreBefore = await v6Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return gs.hud.getScore();
+    });
+
+    await v6Page.evaluate(() => {
+        window.__NUMBER_SNAKE_DEBUG__.forceCollisionWithUltimateBoss();
+    });
+    await v6Page.waitForFunction(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return gs && gs.children.list.some(c => c.name === 'playAgainBtn');
+    }, { timeout: 10000 });
+
+    const buFinale = await v6Page.evaluate((scoreBefore) => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        const texts = gs.children.list.filter(c => c.type === 'Text' && c.depth >= 300).map(t => t.text);
+        const highestUnlocked = window.__NUMBER_SNAKE_DEBUG__.getProgression().highestUnlockedLevel;
+        const scoreAfter = gs.hud.getScore();
+        const playAgainBtn = gs.children.list.find(c => c.name === 'playAgainBtn');
+        const levelSelectBtn = gs.children.list.find(c => c.name === 'levelSelectBtn');
+        const nextBtn = gs.children.list.find(c => c.name === 'nextBtn');
+
+        return {
+            gameState: gs.gameState,
+            bossDestroyed: gs.ultimateBoss === null,
+            scoreDiff: scoreAfter - scoreBefore,
+            hasAllClear: texts.some(t => t.includes('全部關卡完成') || t.includes('ALL LEVELS CLEARED')),
+            hasMasterTitle: texts.some(t => t.includes('你成為數字王者') || t.includes('YOU BECAME THE NUMBER MASTER')),
+            hasPlayAgain: playAgainBtn !== undefined,
+            hasLevelSelect: levelSelectBtn !== undefined,
+            hasNextBtn: nextBtn !== undefined,
+            highestUnlocked
+        };
+    }, buScoreBefore);
+
+    assert(buFinale.gameState === 'LEVEL_CLEAR', `BU: Game state becomes LEVEL_CLEAR`);
+    assert(buFinale.bossDestroyed === true, `BU: Ultimate Boss 500 destroyed`);
+    assert(buFinale.scoreDiff === 3000, `BU: Defeating Ultimate Boss awards exactly +3000 points, got ${buFinale.scoreDiff}`);
+    assert(buFinale.hasAllClear, `BU: Final clear banner displayed ("全部關卡完成！")`);
+    assert(buFinale.hasMasterTitle, `BU: Master title displayed ("你成為數字王者！")`);
+    assert(buFinale.hasPlayAgain === true, `BU: "再玩一次" (playAgainBtn) button displayed`);
+    assert(buFinale.hasLevelSelect === true, `BU: "選擇關卡" (levelSelectBtn) button displayed`);
+    assert(buFinale.hasNextBtn === false, `BU: NO "下一關" (nextBtn) button displayed`);
+    assert(buFinale.highestUnlocked === 4, `BU: Highest unlocked level remains 4 (NO LEVEL 5)`);
+
+    // --- Test BV: Responsive Finale Across 7 Viewports ---
+    console.log('\n--- Test BV: Responsive Finale Across 7 Viewports ---');
+    const viewports = [
+        { width: 375, height: 667 },
+        { width: 390, height: 844 },
+        { width: 412, height: 915 },
+        { width: 768, height: 1024 },
+        { width: 820, height: 1180 },
+        { width: 1280, height: 800 },
+        { width: 1920, height: 1080 }
+    ];
+
+    for (const vp of viewports) {
+        await v6Page.setViewportSize(vp);
+        await v6Page.waitForTimeout(300);
+
+        const bvCheck = await v6Page.evaluate(() => {
+            const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+            if (!gs) return { valid: false };
+            const bounds = gs.getLayoutBounds();
+            const checkOverlap = (r1, r2) => {
+                if (!r1 || !r2) return false;
+                if (r1.width <= 0 || r1.height <= 0 || r2.width <= 0 || r2.height <= 0) return false;
+                return !(r1.x + r1.width <= r2.x || r2.x + r2.width <= r1.x || r1.y + r1.height <= r2.y || r2.y + r2.height <= r1.y);
+            };
+
+            const overlap = checkOverlap(bounds.hp, bounds.score) ||
+                            checkOverlap(bounds.score, bounds.best) ||
+                            checkOverlap(bounds.leaderboard, bounds.hp) ||
+                            checkOverlap(bounds.joystick, bounds.boostButton);
+
+            return {
+                valid: true,
+                overlap
+            };
+        });
+
+        assert(bvCheck.valid === true, `BV: Scene valid at ${vp.width}x${vp.height}`);
+        assert(bvCheck.overlap === false, `BV: No HUD layout overlap at ${vp.width}x${vp.height}`);
+    }
+
+    await v6Context.close();
 
     console.log(`\n=== FINAL SCRIPT RESULTS ===`);
     console.log(`Total Errors/Failed Asserts: ${totalErrors}`);

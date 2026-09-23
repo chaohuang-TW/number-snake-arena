@@ -1,5 +1,6 @@
 import type { RankingResult, RankedParticipant } from '../utils/ranking';
 import type { RectBounds } from '../utils/layout';
+import { t } from '../i18n';
 
 export class LeaderboardPanel {
     public container: Phaser.GameObjects.Container;
@@ -24,7 +25,7 @@ export class LeaderboardPanel {
         this.bg = scene.add.graphics();
         this.container.add(this.bg);
 
-        this.titleText = scene.add.text(10, 8, 'ARENA RANK', {
+        this.titleText = scene.add.text(10, 8, t('leaderboardTitle'), {
             fontSize: '13px',
             fontStyle: 'bold',
             color: '#00ffff'
@@ -95,7 +96,7 @@ export class LeaderboardPanel {
 
                 crown.setVisible(isFirst);
                 rText.setText(`${item.rank}`).setVisible(true);
-                nText.setText(isPlayer ? 'YOU' : item.name).setVisible(true);
+                nText.setText(isPlayer ? t('you') : item.name).setVisible(true);
                 vText.setText(`${item.value}`).setVisible(true);
 
                 // Colors
@@ -122,7 +123,7 @@ export class LeaderboardPanel {
 
         // Check if player is outside top 5
         if (playerRank && playerRank.rank > 5) {
-            this.playerExtraRow.setText(`YOU  #${playerRank.rank}  VALUE ${playerRank.value}`);
+            this.playerExtraRow.setText(`${t('you')}  #${playerRank.rank}  VALUE ${playerRank.value}`);
             this.playerExtraRow.setVisible(true);
             this.panelHeight = 162;
         } else {
@@ -143,6 +144,7 @@ export class LeaderboardPanel {
 
     public resize(gameSize: Phaser.Structs.Size) {
         const w = gameSize.width;
+        this.titleText.setText(t('leaderboardTitle'));
         // Narrow viewport adjustment
         if (w <= 450) {
             this.panelWidth = 156;

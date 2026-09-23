@@ -1,7 +1,13 @@
 import Phaser from 'phaser';
 import type { RectBounds } from '../utils/layout';
 import { rectsOverlap } from '../utils/layout';
-import type { NumberBoss } from '../entities/NumberBoss';
+import { t } from '../i18n';
+
+export interface BossIndicatorTarget {
+    body?: { x: number; y: number; active?: boolean };
+    value: number;
+    isUltimate?: boolean;
+}
 
 export class BossIndicator {
     scene: Phaser.Scene;
@@ -49,8 +55,12 @@ export class BossIndicator {
         this.bg.strokeRoundedRect(-this.panelWidth / 2, -this.panelHeight / 2, this.panelWidth, this.panelHeight, 6);
     }
 
-    public update(boss: NumberBoss | null, camera: Phaser.Cameras.Scene2D.Camera, obstacles: RectBounds[] = []) {
-        if (!boss || !boss.body || !boss.body.active) {
+    public resize(_gameSize?: any) {
+        // Boss indicator repositions dynamically in update()
+    }
+
+    public update(boss: BossIndicatorTarget | null, camera: Phaser.Cameras.Scene2D.Camera, obstacles: RectBounds[] = []) {
+        if (!boss || !boss.body || boss.body.active === false) {
             this.container.setVisible(false);
             return;
         }
@@ -59,7 +69,7 @@ export class BossIndicator {
         const camView = camera.worldView;
         const bossX = boss.body.x;
         const bossY = boss.body.y;
-        const bossRadius = 40;
+        const bossRadius = boss.isUltimate ? 55 : 40;
 
         // Check if Boss is within the camera's visible viewport
         const onScreen = (
@@ -75,7 +85,9 @@ export class BossIndicator {
         }
 
         this.container.setVisible(true);
-        const labelStr = `BOSS ${boss.value}`;
+        const labelStr = boss.isUltimate
+            ? t('ultimateBossLabel', { value: boss.value })
+            : t('bossLabel', { value: boss.value });
         this.text.setText(labelStr);
 
         // Adjust panel width if needed based on text length
@@ -101,7 +113,7 @@ export class BossIndicator {
         // Determine perimeter target on screen
         const viewW = camera.width;
         const viewH = camera.height;
-        const edgeMargin = 45; // recommended 40-60px
+        const edgeMargin = 45; // 40-60px margin
 
         const minX = this.panelWidth / 2 + 10;
         const maxX = viewW - this.panelWidth / 2 - 10;
@@ -119,85 +131,66 @@ export class BossIndicator {
         else if (cos < -1e-5) tX = (edgeMargin - scx) / cos;
         if (sin > 1e-5) tY = (viewH - edgeMargin - scy) / sin;
         else if (sin < -1e-5) tY = (edgeMargin - scy) / sin;
-        const t = Math.min(tX, tY);
 
-        const idealX = Math.max(minX, Math.min(maxX, scx + cos * t));
-        const idealY = Math.max(minY, Math.min(maxY, scy + sin * t));
+        const tMin = Math.min(Math.abs(tX), Math.abs(tY));
+        let bestX = Phaser.Math.Clamp(scx + cos * tMin, minX, maxX);
+        let bestY = Phaser.Math.Clamp(scy + sin * tMin, minY, maxY);
 
-        // Perimeter search for non-overlapping placement
-        const pos = this.resolveNonOverlappingPosition(
-            idealX, idealY,
-            minX, maxX, minY, maxY,
-            obstacles
-        );
-
-        this.container.setPosition(pos.x, pos.y);
-    }
-
-    private resolveNonOverlappingPosition(
-        idealX: number,
-        idealY: number,
-        minX: number,
-        maxX: number,
-        minY: number,
-        maxY: number,
-        obstacles: RectBounds[]
-    ): { x: number; y: number } {
-        const w = this.panelWidth;
-        const h = this.panelHeight;
-
-        // Check if ideal position itself is free
-        const idealBounds: RectBounds = { x: idealX - w / 2, y: idealY - h / 2, width: w, height: h };
-        if (!obstacles.some(obs => rectsOverlap(idealBounds, obs))) {
-            return { x: idealX, y: idealY };
-        }
-
-        // Perimeter parameterization: Top -> Right -> Bottom -> Left
-        const L_top = maxX - minX;
-        const L_right = maxY - minY;
-        const L_bottom = maxX - minX;
-        const totalL = 2 * (L_top + L_right);
-
-        if (totalL <= 0) return { x: idealX, y: idealY };
-
-        const getPoint = (dist: number): { x: number; y: number } => {
-            let p = ((dist % totalL) + totalL) % totalL;
-            if (p < L_top) return { x: minX + p, y: minY };
-            p -= L_top;
-            if (p < L_right) return { x: maxX, y: minY + p };
-            p -= L_right;
-            if (p < L_bottom) return { x: maxX - p, y: maxY };
-            p -= L_bottom;
-            return { x: minX, y: maxY - p };
+        // Anti-overlap avoidance algorithm
+        let candidateRect: RectBounds = {
+            x: bestX - this.panelWidth / 2,
+            y: bestY - this.panelHeight / 2,
+            width: this.panelWidth,
+            height: this.panelHeight
         };
 
-        // Determine ideal perimeter distance
-        let dIdeal = 0;
-        const distToTop = Math.abs(idealY - minY);
-        const distToBottom = Math.abs(idealY - maxY);
-        const distToLeft = Math.abs(idealX - minX);
-        const distToRight = Math.abs(idealX - maxX);
-        const minDist = Math.min(distToTop, distToBottom, distToLeft, distToRight);
+        const hasOverlap = (rect: RectBounds) => {
+            return obstacles.some(obs => rectsOverlap(rect, obs));
+        };
 
-        if (minDist === distToTop) dIdeal = idealX - minX;
-        else if (minDist === distToRight) dIdeal = L_top + (idealY - minY);
-        else if (minDist === distToBottom) dIdeal = L_top + L_right + (maxX - idealX);
-        else dIdeal = L_top + L_right + L_bottom + (maxY - idealY);
+        if (hasOverlap(candidateRect)) {
+            // Sample perimeter points clockwise and counter-clockwise to find nearest non-overlapping position
+            const maxStep = 24;
+            const stepRad = (Math.PI * 2) / maxStep;
+            let found = false;
 
-        // Search alternating clockwise/counter-clockwise with step size 8px
-        const maxSteps = Math.ceil(totalL / 8);
-        for (let i = 1; i <= maxSteps; i++) {
-            const step = i * 8;
-            for (const sign of [1, -1]) {
-                const pt = getPoint(dIdeal + sign * step);
-                const candidate: RectBounds = { x: pt.x - w / 2, y: pt.y - h / 2, width: w, height: h };
-                if (!obstacles.some(obs => rectsOverlap(candidate, obs))) {
-                    return pt;
+            for (let i = 1; i <= maxStep / 2; i++) {
+                // Test +i and -i angles
+                for (const sign of [1, -1]) {
+                    const testAngle = angle + sign * i * stepRad;
+                    const testCos = Math.cos(testAngle);
+                    const testSin = Math.sin(testAngle);
+
+                    let stepTX = Infinity;
+                    let stepTY = Infinity;
+                    if (testCos > 1e-5) stepTX = (viewW - edgeMargin - scx) / testCos;
+                    else if (testCos < -1e-5) stepTX = (edgeMargin - scx) / testCos;
+                    if (testSin > 1e-5) stepTY = (viewH - edgeMargin - scy) / testSin;
+                    else if (testSin < -1e-5) stepTY = (edgeMargin - scy) / testSin;
+
+                    const stepT = Math.min(Math.abs(stepTX), Math.abs(stepTY));
+                    const candX = Phaser.Math.Clamp(scx + testCos * stepT, minX, maxX);
+                    const candY = Phaser.Math.Clamp(scy + testSin * stepT, minY, maxY);
+
+                    const testRect: RectBounds = {
+                        x: candX - this.panelWidth / 2,
+                        y: candY - this.panelHeight / 2,
+                        width: this.panelWidth,
+                        height: this.panelHeight
+                    };
+
+                    if (!hasOverlap(testRect)) {
+                        bestX = candX;
+                        bestY = candY;
+                        found = true;
+                        break;
+                    }
                 }
+                if (found) break;
             }
         }
 
-        return { x: idealX, y: idealY };
+        this.container.setPosition(bestX, bestY);
     }
 
     public hide() {
@@ -223,10 +216,6 @@ export class BossIndicator {
             angle: this.currentAngle,
             bounds: this.getBounds()
         };
-    }
-
-    public resize(_gameSize: Phaser.Structs.Size) {
-        // Will be dynamically positioned in update()
     }
 
     public destroy() {

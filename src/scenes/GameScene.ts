@@ -17,11 +17,19 @@ import { BossIndicator } from '../ui/BossIndicator';
 import type { RectBounds } from '../utils/layout';
 import { getRankingResult, type ArenaParticipant, type RankingResult } from '../utils/ranking';
 import { normalizeStartValue } from '../utils/prepValues';
+import { t } from '../i18n';
+import { UltimateBoss } from '../entities/UltimateBoss';
+import { LuckyWheelOverlay } from '../ui/LuckyWheelOverlay';
+import { type WheelReward, applyWheelReward } from '../utils/luckyWheel';
 
 export class GameScene extends Phaser.Scene {
     player!: PlayerSnake;
     enemies: NumberEnemy[] = [];
     boss: NumberBoss | null = null;
+    ultimateBoss: UltimateBoss | null = null;
+    luckyWheelOverlay: LuckyWheelOverlay | null = null;
+    wheelReward: WheelReward | null = null;
+    isUltimatePhase: boolean = false;
     bossIndicator!: BossIndicator;
     orbs: CollectibleOrb[] = [];
     magnet!: MagnetAbility;
@@ -86,6 +94,10 @@ export class GameScene extends Phaser.Scene {
         this.enemies = [];
         this.orbs = [];
         this.boss = null;
+        this.ultimateBoss = null;
+        this.luckyWheelOverlay = null;
+        this.wheelReward = null;
+        this.isUltimatePhase = false;
         this.bossSpawned = false;
         this.comboCount = 0;
         this.lastEatTime = 0;
@@ -136,7 +148,11 @@ export class GameScene extends Phaser.Scene {
             (window as any).__E2E_READONLY__ = {
                 getPlayerValue: () => this.player ? this.player.value : 0,
                 getBossSpawned: () => this.bossSpawned,
-                getBossState: () => this.boss ? (this.boss.isFleeing ? 'FLEE' : 'CHASE') : 'NONE'
+                getBossState: () => {
+                    if (this.ultimateBoss) return this.ultimateBoss.isFleeing ? 'FLEE' : 'CHASE';
+                    return this.boss ? (this.boss.isFleeing ? 'FLEE' : 'CHASE') : 'NONE';
+                },
+                getGameState: () => this.gameState
             };
         }
         if (urlParams.get('debug') === '1') {
@@ -174,15 +190,29 @@ export class GameScene extends Phaser.Scene {
                 spawnBoss: () => {
                     if (!this.bossSpawned) this.spawnBoss();
                 },
-                getBossState: () => this.boss ? (this.boss.isFleeing ? 'FLEE' : 'CHASE') : 'NONE',
-                getBossPosition: () => this.boss && this.boss.body ? { x: this.boss.body.x, y: this.boss.body.y } : null,
+                getBossState: () => {
+                    if (this.ultimateBoss) return this.ultimateBoss.isFleeing ? 'FLEE' : 'CHASE';
+                    return this.boss ? (this.boss.isFleeing ? 'FLEE' : 'CHASE') : 'NONE';
+                },
+                getBossPosition: () => {
+                    if (this.ultimateBoss && this.ultimateBoss.body) return { x: this.ultimateBoss.body.x, y: this.ultimateBoss.body.y };
+                    return this.boss && this.boss.body ? { x: this.boss.body.x, y: this.boss.body.y } : null;
+                },
                 setBossPositionForTest: (x: number, y: number) => {
-                    if (this.boss && this.boss.body) {
+                    if (this.ultimateBoss && this.ultimateBoss.body) {
+                        this.ultimateBoss.body.setPosition(x, y);
+                        this.ultimateBoss.valueText.setPosition(x, y);
+                    } else if (this.boss && this.boss.body) {
                         this.boss.body.setPosition(x, y);
                         this.boss.valueText.setPosition(x, y);
                     }
                 },
-                getBossVelocity: () => this.boss && this.boss.body && this.boss.body.body ? { x: this.boss.body.body.velocity.x, y: this.boss.body.body.velocity.y } : { x: 0, y: 0 },
+                getBossVelocity: () => {
+                    if (this.ultimateBoss && this.ultimateBoss.body && this.ultimateBoss.body.body) {
+                        return { x: this.ultimateBoss.body.body.velocity.x, y: this.ultimateBoss.body.body.velocity.y };
+                    }
+                    return this.boss && this.boss.body && this.boss.body.body ? { x: this.boss.body.body.velocity.x, y: this.boss.body.body.velocity.y } : { x: 0, y: 0 };
+                },
                 getBossIndicatorState: () => this.bossIndicator ? this.bossIndicator.getState() : { visible: false, x: 0, y: 0, value: 0, text: '', angle: 0, bounds: null },
                 forceSpecificEnemy: (e: any) => { this.player.isInvulnerable = false; this.handleEnemyCollision(e, 0, this.time.now); },
                 forceCollisionWithEnemy: (index: number) => {
@@ -191,11 +221,13 @@ export class GameScene extends Phaser.Scene {
                         this.handleEnemyCollision(this.enemies[index], index, this.time.now);
                     }
                 },
-                forceCollisionWithBoss: () => { this.player.isInvulnerable = false; 
-                    if (this.boss) this.handleBossCollision();
+                forceCollisionWithBoss: () => {
+                    this.player.isInvulnerable = false; 
+                    if (this.ultimateBoss) this.handleUltimateBossCollision();
+                    else if (this.boss) this.handleBossCollision();
                 },
                 getGameState: () => {
-                    if (this.gameState === 'GAME_OVER' || this.gameState === 'VICTORY' || this.gameState === 'LEVEL_CLEAR') return this.gameState;
+                    if (this.gameState === 'GAME_OVER' || this.gameState === 'VICTORY' || this.gameState === 'LEVEL_CLEAR' || this.gameState === 'LUCKY_WHEEL') return this.gameState;
                     return this.scene.isPaused('GameScene') ? 'PAUSED' : 'RUNNING';
                 },
                 simulateVisibilityHidden: () => {
@@ -236,7 +268,24 @@ export class GameScene extends Phaser.Scene {
                         }
                     });
                     this.updateArenaRanking();
-                }
+                },
+                // v0.6.0 Debug APIs
+                getLuckyWheelOverlay: () => this.luckyWheelOverlay,
+                forceWheelSpin: (rewardId?: string) => this.luckyWheelOverlay ? this.luckyWheelOverlay.spin(rewardId) : null,
+                getUltimateBoss: () => this.ultimateBoss,
+                spawnUltimateBossForTest: () => {
+                    if (!this.ultimateBoss) {
+                        this.ultimateBoss = new UltimateBoss(this, 0, -500);
+                        this.isUltimatePhase = true;
+                    }
+                    return this.ultimateBoss;
+                },
+                forceCollisionWithUltimateBoss: () => {
+                    this.player.isInvulnerable = false;
+                    if (this.ultimateBoss) this.handleUltimateBossCollision();
+                },
+                getWheelReward: () => this.wheelReward,
+                isUltimatePhaseActive: () => this.isUltimatePhase
             };
         } else {
             // Ensure no debug API exists in normal mode
@@ -371,7 +420,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     update(time: number, dt: number) {
-        if (this.gameState === 'GAME_OVER' || this.gameState === 'VICTORY' || this.gameState === 'LEVEL_CLEAR') return;
+        if (this.gameState === 'GAME_OVER' || this.gameState === 'VICTORY' || this.gameState === 'LEVEL_CLEAR' || this.gameState === 'LUCKY_WHEEL') return;
 
         let dx = 0;
         let dy = 0;
@@ -436,31 +485,33 @@ export class GameScene extends Phaser.Scene {
             this.comboCount = 0;
         }
 
-        // Assist: Early Game Rescue
-        if (!this.bossSpawned && this.player.value < GameBalance.assist.earlyGameRescueValue) {
-            if (time - this.lastEatTime > GameBalance.assist.earlyGameRescueTimer) {
-                if (time - this.lastRescueTime > GameBalance.assist.earlyGameRescueCooldown) {
-                    this.spawnEnemy(true);
-                    this.spawnEnemy(true);
-                    this.lastRescueTime = time;
-                }
-            }
-        }
-
-        // Assist: Local Edible Availability
-        if (time - this.lastEdibleCheckTime > 2000 && !this.bossSpawned) {
-            this.lastEdibleCheckTime = time;
-            let edibleCount = 0;
-            this.enemies.forEach(e => {
-                if (!e.body.active) return;
-                if (e.value < this.player.value) {
-                    if (Phaser.Math.Distance.Between(this.player.head.x, this.player.head.y, e.body.x, e.body.y) < 450) {
-                        edibleCount++;
+        if (!this.isUltimatePhase) {
+            // Assist: Early Game Rescue
+            if (!this.bossSpawned && this.player.value < GameBalance.assist.earlyGameRescueValue) {
+                if (time - this.lastEatTime > GameBalance.assist.earlyGameRescueTimer) {
+                    if (time - this.lastRescueTime > GameBalance.assist.earlyGameRescueCooldown) {
+                        this.spawnEnemy(true);
+                        this.spawnEnemy(true);
+                        this.lastRescueTime = time;
                     }
                 }
-            });
-            if (edibleCount < 4 && this.enemies.length < GameBalance.enemy.normalMaxLimit + 2) {
-                this.spawnEnemy(true);
+            }
+
+            // Assist: Local Edible Availability
+            if (time - this.lastEdibleCheckTime > 2000 && !this.bossSpawned) {
+                this.lastEdibleCheckTime = time;
+                let edibleCount = 0;
+                this.enemies.forEach(e => {
+                    if (!e.body.active) return;
+                    if (e.value < this.player.value) {
+                        if (Phaser.Math.Distance.Between(this.player.head.x, this.player.head.y, e.body.x, e.body.y) < 450) {
+                            edibleCount++;
+                        }
+                    }
+                });
+                if (edibleCount < 4 && this.enemies.length < GameBalance.enemy.normalMaxLimit + 2) {
+                    this.spawnEnemy(true);
+                }
             }
         }
 
@@ -488,7 +539,7 @@ export class GameScene extends Phaser.Scene {
         }
 
         // Boss Logic
-        if (this.player.value >= this.levelDef.bossTriggerValue && !this.bossSpawned) {
+        if (!this.isUltimatePhase && this.player.value >= this.levelDef.bossTriggerValue && !this.bossSpawned) {
             this.spawnBoss();
         }
 
@@ -500,15 +551,31 @@ export class GameScene extends Phaser.Scene {
             if (this.physics.overlap(this.player.head, this.boss.body)) {
                 this.handleBossCollision();
             }
+        } else if (this.ultimateBoss) {
+            this.ultimateBoss.update(dt, this.player.head.x, this.player.head.y, this.player.value);
+            if (this.bossIndicator) {
+                this.bossIndicator.update(this.ultimateBoss, this.cameras.main, this.getObstacleBounds());
+            }
+            if (this.physics.overlap(this.player.head, this.ultimateBoss.body)) {
+                this.handleUltimateBossCollision();
+            }
         } else if (this.bossIndicator) {
             this.bossIndicator.hide();
         }
 
         // Spawning
-        this.spawnTimer -= dt;
-        if (this.spawnTimer <= 0 && this.enemies.length < GameBalance.enemy.normalMaxLimit) {
-            this.spawnEnemy();
-            this.spawnTimer = 500;
+        if (this.isUltimatePhase) {
+            this.spawnTimer -= dt;
+            if (this.spawnTimer <= 0 && this.enemies.length < 16) {
+                this.spawnFinalEcosystemEnemy();
+                this.spawnTimer = 400;
+            }
+        } else {
+            this.spawnTimer -= dt;
+            if (this.spawnTimer <= 0 && this.enemies.length < GameBalance.enemy.normalMaxLimit) {
+                this.spawnEnemy();
+                this.spawnTimer = 500;
+            }
         }
         
         if (this.debugUI) {
@@ -566,6 +633,15 @@ export class GameScene extends Phaser.Scene {
             });
         }
 
+        if (this.ultimateBoss && this.ultimateBoss.body && this.ultimateBoss.body.active) {
+            participants.push({
+                id: this.ultimateBoss.arenaId,
+                name: this.ultimateBoss.arenaName,
+                value: this.ultimateBoss.value,
+                type: 'boss'
+            });
+        }
+
         const result = getRankingResult(participants);
         this.currentRanking = result;
         if (this.leaderboard) {
@@ -608,6 +684,9 @@ export class GameScene extends Phaser.Scene {
             if (this.boss?.body?.active) {
                 this.worldCrown.setPosition(this.boss.body.x, this.boss.body.y - 48);
                 this.worldCrown.setVisible(true);
+            } else if (this.ultimateBoss?.body?.active) {
+                this.worldCrown.setPosition(this.ultimateBoss.body.x, this.ultimateBoss.body.y - 55);
+                this.worldCrown.setVisible(true);
             } else {
                 this.worldCrown.setVisible(false);
             }
@@ -637,6 +716,10 @@ export class GameScene extends Phaser.Scene {
         this.clearOrbs();
         this.magnet.reset();
         if (this.boss) { this.boss.destroy(); this.boss = null; this.bossSpawned = false; }
+        if (this.ultimateBoss) { this.ultimateBoss.destroy(); this.ultimateBoss = null; }
+        if (this.luckyWheelOverlay) { this.luckyWheelOverlay.destroy(); this.luckyWheelOverlay = null; }
+        this.isUltimatePhase = false;
+        this.wheelReward = null;
         this.spawnTimer = 9999999;
         this.updateArenaRanking();
     }
@@ -791,8 +874,9 @@ export class GameScene extends Phaser.Scene {
         this.boss = new NumberBoss(this, sx, sy, this.levelDef.bossValue);
         this.audio.playBossAlert();
         
-        const alert = this.add.text(this.player.head.x, this.player.head.y - 100, `${this.levelDef.bossValue} APPEARED!`, {
-            fontSize: '48px', fontStyle: 'bold', color: '#ff0000'
+        const alertText = t('bossAppeared', { value: this.levelDef.bossValue }) || `${this.levelDef.bossValue} APPEARED!`;
+        const alert = this.add.text(this.player.head.x, this.player.head.y - 100, alertText, {
+            fontSize: '48px', fontStyle: 'bold', color: '#ff0000', stroke: '#000000', strokeThickness: 3
         }).setOrigin(0.5).setDepth(200);
         
         this.tweens.add({
@@ -820,7 +904,11 @@ export class GameScene extends Phaser.Scene {
 
             const oldVal = this.player.value - e.value;
             if (this.boss && this.player.value > this.levelDef.bossValue && oldVal <= this.levelDef.bossValue) {
-                this.showReversalText(`NOW HUNT ${this.levelDef.bossValue}!`);
+                this.showReversalText(t('nowHuntBoss', { value: this.levelDef.bossValue }) || `NOW HUNT ${this.levelDef.bossValue}!`);
+                this.audio.playBossReversal();
+            }
+            if (this.ultimateBoss && this.player.value > this.ultimateBoss.value && oldVal <= this.ultimateBoss.value) {
+                this.showReversalText(t('nowHuntBoss', { value: 500 }) || `NOW HUNT 500!`);
                 this.audio.playBossReversal();
             }
 
@@ -853,18 +941,24 @@ export class GameScene extends Phaser.Scene {
     }
 
     handleBossCollision() {
-        if (this.player.value > this.boss!.value) {
-            // Victory
+        if (!this.boss || !this.boss.body) return;
+        if (this.player.value > this.boss.value) {
+            // Victory or Wheel Finale
             if (this.bossIndicator) this.bossIndicator.hide();
-            this.boss!.destroy();
+            this.boss.destroy();
             this.boss = null;
             this.createParticles(this.player.head.x, this.player.head.y, 0xff0055, 50);
             this.audio.playEatSFX(10);
             this.hud.addScore(1000);
-            this.levelClear();
+
+            if (this.levelId === 4) {
+                this.beginLuckyWheelFinale();
+            } else {
+                this.levelClear();
+            }
         } else if (!this.player.isInvulnerable) {
             // DAMAGE
-            const dmg = calculateDamage(this.player.value, this.boss!.value);
+            const dmg = calculateDamage(this.player.value, this.boss.value);
             if (dmg.instantKO) {
                 this.gameState = 'GAME_OVER';
                 this.audio.playGameOver();
@@ -872,7 +966,114 @@ export class GameScene extends Phaser.Scene {
                 this.showEndScreen('GAME OVER', '#ff0000');
             } else if (dmg.hpLoss > 0) {
                 const newSeg = calculateNewBodySegments(this.player.segments, dmg.hpLoss);
-                const angle = Math.atan2(this.player.head.y - this.boss!.body.y, this.player.head.x - this.boss!.body.x);
+                const angle = Math.atan2(this.player.head.y - this.boss.body.y, this.player.head.x - this.boss.body.x);
+                this.player.takeDamage(dmg.hpLoss, newSeg, new Phaser.Math.Vector2(Math.cos(angle), Math.sin(angle)));
+                this.cameras.main.shake(200, 0.01);
+                this.audio.playHitSFX();
+                if (this.player.hp <= 0) {
+                    this.gameState = 'GAME_OVER';
+                    this.audio.playGameOver();
+                    this.saveScore();
+                    this.showEndScreen('GAME OVER', '#ff0000');
+                }
+            }
+        }
+    }
+
+    beginLuckyWheelFinale() {
+        this.gameState = 'LUCKY_WHEEL';
+        if (this.worldCrown) this.worldCrown.setVisible(false);
+        if (this.bossIndicator) this.bossIndicator.hide();
+        this.player.head.setVelocity(0, 0);
+        this.luckyWheelOverlay = new LuckyWheelOverlay(this, (reward) => {
+            this.luckyWheelOverlay?.destroy();
+            this.luckyWheelOverlay = null;
+            this.transitionToUltimateArena(reward);
+        });
+    }
+
+    transitionToUltimateArena(reward: WheelReward) {
+        this.wheelReward = reward;
+        applyWheelReward(this.player, reward, this.magnet);
+
+        // Clear previous enemies and orbs
+        for (const e of this.enemies) { e.destroy(); }
+        this.enemies = [];
+        this.clearOrbs();
+
+        // Teleport player near center
+        this.player.teleport(0, 80);
+
+        // Spawn 10 edible snakes (values 25-80)
+        for (let i = 0; i < 10; i++) {
+            const val = 25 + i * 6; // 25 to 79
+            const angle = (i / 10) * Math.PI * 2;
+            const dist = 350 + (i % 3) * 80;
+            const sx = Math.cos(angle) * dist;
+            const sy = Math.sin(angle) * dist;
+            const enemy = new NumberEnemy(this, sx, sy, val);
+            this.enemies.push(enemy);
+        }
+
+        // Spawn UltimateBoss at (0, -500)
+        this.ultimateBoss = new UltimateBoss(this, 0, -500);
+        this.audio.playBossAlert();
+
+        const bannerText = t('ultimateBossAppeared') || 'ULTIMATE BOSS 500 APPEARED!';
+        const alert = this.add.text(this.player.head.x, this.player.head.y - 100, bannerText, {
+            fontSize: '44px', fontStyle: 'bold', color: '#ff0055', stroke: '#000000', strokeThickness: 4
+        }).setOrigin(0.5).setDepth(200);
+
+        this.tweens.add({
+            targets: alert, y: alert.y - 50, alpha: 0, duration: 2500,
+            onComplete: () => alert.destroy()
+        });
+
+        this.isUltimatePhase = true;
+        this.gameState = 'RUNNING';
+        this.updateArenaRanking();
+    }
+
+    spawnFinalEcosystemEnemy(): NumberEnemy {
+        const hw = GameBalance.world.width / 2;
+        const hh = GameBalance.world.height / 2;
+        const SPAWN_EDGE_MARGIN = 140;
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 300 + Math.random() * 500;
+        let sx = this.player.head.x + Math.cos(angle) * dist;
+        let sy = this.player.head.y + Math.sin(angle) * dist;
+        sx = Phaser.Math.Clamp(sx, -hw + SPAWN_EDGE_MARGIN, hw - SPAWN_EDGE_MARGIN);
+        sy = Phaser.Math.Clamp(sy, -hh + SPAWN_EDGE_MARGIN, hh - SPAWN_EDGE_MARGIN);
+        const val = Phaser.Math.Between(10, 90);
+        const enemy = new NumberEnemy(this, sx, sy, val);
+        this.enemies.push(enemy);
+        return enemy;
+    }
+
+    handleUltimateBossCollision() {
+        if (!this.ultimateBoss || !this.ultimateBoss.body.active) return;
+
+        if (this.player.value > this.ultimateBoss.value) {
+            // Victory
+            if (this.bossIndicator) this.bossIndicator.hide();
+            this.createParticles(this.ultimateBoss.body.x, this.ultimateBoss.body.y, 0xff00ff, 80);
+            this.audio.playEatSFX(10);
+            this.audio.playVictory();
+            this.hud.addScore(3000);
+            this.ultimateBoss.destroy();
+            this.ultimateBoss = null;
+            this.levelClear();
+        } else if (!this.player.isInvulnerable) {
+            // DAMAGE
+            const dmg = calculateDamage(this.player.value, this.ultimateBoss.value);
+            if (dmg.instantKO) {
+                this.gameState = 'GAME_OVER';
+                this.audio.playGameOver();
+                this.saveScore();
+                this.showEndScreen('GAME OVER', '#ff0000');
+            } else if (dmg.hpLoss > 0) {
+                const newSeg = calculateNewBodySegments(this.player.segments, dmg.hpLoss);
+                const angle = Math.atan2(this.player.head.y - this.ultimateBoss.body.y, this.player.head.x - this.ultimateBoss.body.x);
                 this.player.takeDamage(dmg.hpLoss, newSeg, new Phaser.Math.Vector2(Math.cos(angle), Math.sin(angle)));
                 this.cameras.main.shake(200, 0.01);
                 this.audio.playHitSFX();
@@ -945,25 +1146,25 @@ export class GameScene extends Phaser.Scene {
         bg.fillRect(this.cameras.main.scrollX, this.cameras.main.scrollY, this.scale.width, this.scale.height);
         bg.setDepth(300);
 
-        this.add.text(cx, cy - 140, `${this.levelDef.name} CLEAR!`, { fontSize: '56px', fontStyle: 'bold', color: '#00ff00' }).setOrigin(0.5).setDepth(301);
+        this.add.text(cx, cy - 140, t('levelClearTitle', { name: this.levelDef.name }), { fontSize: '56px', fontStyle: 'bold', color: '#00ff00' }).setOrigin(0.5).setDepth(301);
         
         let currentY = cy - 40;
 
         const scoreVal = this.hud.getScore();
         const bestVal = ProgressionManager.getBestScore(this.levelId);
-        this.add.text(cx, currentY - 30, `SCORE: ${scoreVal}    BEST: ${bestVal}`, {
+        this.add.text(cx, currentY - 30, `${t('score')}: ${scoreVal}    ${t('best')}: ${bestVal}`, {
             fontSize: '22px', fontStyle: 'bold', color: '#ffffff'
         }).setOrigin(0.5).setDepth(301);
 
         if (this.isNewBest) {
-            this.add.text(cx, currentY - 5, 'NEW BEST!', {
+            this.add.text(cx, currentY - 5, t('newBest'), {
                 fontSize: '20px', fontStyle: 'bold', color: '#ffd700'
             }).setOrigin(0.5).setDepth(301);
         }
         
         if (!this.levelDef.nextLevelId) {
-            this.add.text(cx, currentY + 25, 'ALL LEVELS CLEARED!', { fontSize: '36px', fontStyle: 'bold', color: '#ffff00' }).setOrigin(0.5).setDepth(301);
-            this.add.text(cx, currentY + 75, 'YOU BECAME THE NUMBER MASTER!', { fontSize: '24px', fontStyle: 'bold', color: '#00ffff' }).setOrigin(0.5).setDepth(301);
+            this.add.text(cx, currentY + 25, t('allLevelsCleared'), { fontSize: '36px', fontStyle: 'bold', color: '#ffff00' }).setOrigin(0.5).setDepth(301);
+            this.add.text(cx, currentY + 75, t('masterTitle'), { fontSize: '24px', fontStyle: 'bold', color: '#00ffff' }).setOrigin(0.5).setDepth(301);
             this.time.delayedCall(500, () => {
                 this.createLevelClearButtons(cx, cy + 145);
             });
@@ -971,13 +1172,13 @@ export class GameScene extends Phaser.Scene {
         }
 
         if (newlyClaimedReward) {
-            this.add.text(cx, currentY + 20, '+1 HEART', { fontSize: '32px', fontStyle: 'bold', color: '#ff5555' }).setOrigin(0.5).setDepth(301);
+            this.add.text(cx, currentY + 20, t('levelRewardHeart'), { fontSize: '32px', fontStyle: 'bold', color: '#ff5555' }).setOrigin(0.5).setDepth(301);
             const oldMax = ProgressionManager.getMaxHP() - this.levelDef.reward!.value;
             const newMax = ProgressionManager.getMaxHP();
             const heartText = this.add.text(cx, currentY + 60, `${oldMax} HEARTS`, { fontSize: '32px' }).setOrigin(0.5).setDepth(301);
             
             this.time.delayedCall(800, () => {
-                heartText.setText(`${oldMax} → ${newMax} HEARTS`);
+                heartText.setText(t('heartsTransition', { old: oldMax, new: newMax }));
                 this.tweens.add({
                     targets: heartText,
                     scale: 1.5,
@@ -986,7 +1187,7 @@ export class GameScene extends Phaser.Scene {
                     onComplete: () => {
                         if (newlyUnlocked) {
                             this.time.delayedCall(400, () => {
-                                this.add.text(cx, currentY + 110, `LEVEL ${this.levelDef.nextLevelId} UNLOCKED!`, { fontSize: '36px', fontStyle: 'bold', color: '#00ffff' }).setOrigin(0.5).setDepth(301);
+                                this.add.text(cx, currentY + 110, t('levelUnlocked', { next: this.levelDef.nextLevelId }), { fontSize: '36px', fontStyle: 'bold', color: '#00ffff' }).setOrigin(0.5).setDepth(301);
                                 this.createLevelClearButtons(cx, cy + 185);
                             });
                         } else {
@@ -997,7 +1198,7 @@ export class GameScene extends Phaser.Scene {
             });
         } else {
             if (newlyUnlocked) {
-                this.add.text(cx, currentY + 30, `LEVEL ${this.levelDef.nextLevelId} UNLOCKED!`, { fontSize: '36px', fontStyle: 'bold', color: '#00ffff' }).setOrigin(0.5).setDepth(301);
+                this.add.text(cx, currentY + 30, t('levelUnlocked', { next: this.levelDef.nextLevelId }), { fontSize: '36px', fontStyle: 'bold', color: '#00ffff' }).setOrigin(0.5).setDepth(301);
             }
             this.time.delayedCall(500, () => {
                 this.createLevelClearButtons(cx, cy + 140);
@@ -1007,7 +1208,7 @@ export class GameScene extends Phaser.Scene {
 
     createLevelClearButtons(cx: number, cy: number) {
         if (!this.levelDef.nextLevelId) {
-            const playAgainBtn = this.add.text(cx, cy - 30, 'PLAY AGAIN', {
+            const playAgainBtn = this.add.text(cx, cy - 30, t('playAgain'), {
                 fontSize: '32px', backgroundColor: '#555555', padding: { x: 20, y: 10 }
             }).setOrigin(0.5).setDepth(301).setInteractive({ useHandCursor: true });
             playAgainBtn.setName('playAgainBtn');
@@ -1016,7 +1217,7 @@ export class GameScene extends Phaser.Scene {
                 this.scene.start('PrepScene', { levelId: 4 });
             });
 
-            const levelSelectBtn = this.add.text(cx, cy + 50, 'LEVEL SELECT', {
+            const levelSelectBtn = this.add.text(cx, cy + 50, t('levelSelect'), {
                 fontSize: '32px', backgroundColor: '#0055aa', padding: { x: 20, y: 10 }
             }).setOrigin(0.5).setDepth(301).setInteractive({ useHandCursor: true });
             levelSelectBtn.setName('levelSelectBtn');
@@ -1028,7 +1229,7 @@ export class GameScene extends Phaser.Scene {
         }
 
         if (this.levelDef.nextLevelId && ProgressionManager.getHighestUnlockedLevel() >= this.levelDef.nextLevelId) {
-            const nextBtn = this.add.text(cx, cy - 60, 'NEXT LEVEL', {
+            const nextBtn = this.add.text(cx, cy - 60, t('nextLevel'), {
                 fontSize: '32px', backgroundColor: '#00aa00', padding: { x: 20, y: 10 }
             }).setOrigin(0.5).setDepth(301).setInteractive({ useHandCursor: true });
             nextBtn.setName('nextBtn');
@@ -1038,7 +1239,7 @@ export class GameScene extends Phaser.Scene {
             });
         }
 
-        const replayBtn = this.add.text(cx, cy, 'REPLAY LEVEL', {
+        const replayBtn = this.add.text(cx, cy, t('replayLevel'), {
             fontSize: '24px', backgroundColor: '#555555', padding: { x: 15, y: 8 }
         }).setOrigin(0.5).setDepth(301).setInteractive({ useHandCursor: true });
         replayBtn.setName('replayBtn');
@@ -1047,7 +1248,7 @@ export class GameScene extends Phaser.Scene {
             this.scene.start('PrepScene', { levelId: this.levelId });
         });
 
-        const menuBtn = this.add.text(cx, cy + 60, 'MENU', {
+        const menuBtn = this.add.text(cx, cy + 60, t('menu'), {
             fontSize: '24px', backgroundColor: '#0055aa', padding: { x: 15, y: 8 }
         }).setOrigin(0.5).setDepth(301).setInteractive({ useHandCursor: true });
         menuBtn.setName('menuBtn');
@@ -1099,16 +1300,17 @@ export class GameScene extends Phaser.Scene {
         bg.fillRect(this.cameras.main.scrollX, this.cameras.main.scrollY, this.scale.width, this.scale.height);
         bg.setDepth(300);
 
-        this.add.text(cx, cy - 110, title, { fontSize: '64px', fontStyle: 'bold', color }).setOrigin(0.5).setDepth(301);
-        this.add.text(cx, cy - 35, `FINAL VALUE: ${this.player.value}`, { fontSize: '24px', color: '#fff' }).setOrigin(0.5).setDepth(301);
-        this.add.text(cx, cy + 5, `SCORE: ${this.hud.getScore()}`, { fontSize: '24px', color: '#fff' }).setOrigin(0.5).setDepth(301);
-        this.add.text(cx, cy + 38, `BEST: ${ProgressionManager.getBestScore(this.levelId)}`, { fontSize: '20px', color: '#aaaaaa' }).setOrigin(0.5).setDepth(301);
+        const titleText = title === 'GAME OVER' ? t('gameOver') : (title === 'VICTORY' ? t('victory') : title);
+        this.add.text(cx, cy - 110, titleText, { fontSize: '64px', fontStyle: 'bold', color }).setOrigin(0.5).setDepth(301);
+        this.add.text(cx, cy - 35, t('finalValue', { value: this.player.value }), { fontSize: '24px', color: '#fff' }).setOrigin(0.5).setDepth(301);
+        this.add.text(cx, cy + 5, `${t('score')}: ${this.hud.getScore()}`, { fontSize: '24px', color: '#fff' }).setOrigin(0.5).setDepth(301);
+        this.add.text(cx, cy + 38, `${t('best')}: ${ProgressionManager.getBestScore(this.levelId)}`, { fontSize: '20px', color: '#aaaaaa' }).setOrigin(0.5).setDepth(301);
 
         if (this.isNewBest) {
-            this.add.text(cx, cy + 68, 'NEW BEST!', { fontSize: '22px', fontStyle: 'bold', color: '#ffd700' }).setOrigin(0.5).setDepth(301);
+            this.add.text(cx, cy + 68, t('newBest'), { fontSize: '22px', fontStyle: 'bold', color: '#ffd700' }).setOrigin(0.5).setDepth(301);
         }
 
-        const btn = this.add.text(cx, cy + (this.isNewBest ? 116 : 100), 'PLAY AGAIN', {
+        const btn = this.add.text(cx, cy + (this.isNewBest ? 116 : 100), t('playAgain'), {
             fontSize: '32px', backgroundColor: '#0055aa', padding: { x: 20, y: 10 }
         }).setOrigin(0.5).setDepth(301).setInteractive({ useHandCursor: true });
         btn.setName('playAgainBtn');
@@ -1129,6 +1331,8 @@ export class GameScene extends Phaser.Scene {
         this.clearOrbs();
         this.player.destroy();
         this.boss?.destroy();
+        this.ultimateBoss?.destroy();
+        this.luckyWheelOverlay?.destroy();
         this.magnet?.destroy();
         if (this.debugUI) this.debugUI.text.destroy();
     }
@@ -1138,6 +1342,7 @@ export class GameScene extends Phaser.Scene {
         this.hud.resize(gameSize);
         this.leaderboard?.resize(gameSize);
         this.bossIndicator?.resize(gameSize);
+        this.luckyWheelOverlay?.resize(gameSize);
     }
 
     getObstacleBounds(): RectBounds[] {

@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { ProgressionManager } from '../models/Progression';
 import { LEVELS } from '../config/levels';
+import { t, getLanguage, setLanguage } from '../i18n';
 
 export class MenuScene extends Phaser.Scene {
     private titleText!: Phaser.GameObjects.Text;
@@ -9,6 +10,12 @@ export class MenuScene extends Phaser.Scene {
     private customizeBtnText!: Phaser.GameObjects.Text;
     public levelCards: Phaser.GameObjects.Container[] = [];
     public tutorialText!: Phaser.GameObjects.Text;
+
+    // Language switch
+    private langBg!: Phaser.GameObjects.Rectangle;
+    private langZhBtn!: Phaser.GameObjects.Text;
+    private langDivider!: Phaser.GameObjects.Text;
+    private langEnBtn!: Phaser.GameObjects.Text;
 
     constructor() {
         super('MenuScene');
@@ -19,14 +26,18 @@ export class MenuScene extends Phaser.Scene {
         
         const cx = this.scale.width / 2;
         const cy = this.scale.height / 2;
+        const w = this.scale.width;
 
-        this.titleText = this.add.text(cx, 45, 'NUMBER SNAKE ARENA', {
+        // Language toggle top right
+        this.createLanguageToggle(w - 60, 24);
+
+        this.titleText = this.add.text(cx, 45, t('menuTitle'), {
             fontSize: '36px',
             fontStyle: 'bold',
             color: '#00ffff'
         }).setOrigin(0.5);
 
-        this.levelSelectText = this.add.text(cx, 88, 'LEVEL SELECT', {
+        this.levelSelectText = this.add.text(cx, 88, t('levelSelect'), {
             fontSize: '22px',
             color: '#ffffff'
         }).setOrigin(0.5);
@@ -35,7 +46,7 @@ export class MenuScene extends Phaser.Scene {
         this.customizeBtnBg = this.add.rectangle(cx, 126, 160, 32, 0x0055aa, 0.9)
             .setStrokeStyle(2, 0x00ffff)
             .setInteractive({ useHandCursor: true });
-        this.customizeBtnText = this.add.text(cx, 126, '🎨 CUSTOMIZE', {
+        this.customizeBtnText = this.add.text(cx, 126, t('customize'), {
             fontSize: '16px',
             fontStyle: 'bold',
             color: '#ffffff'
@@ -50,7 +61,7 @@ export class MenuScene extends Phaser.Scene {
         // Tutorial
         const tutorialSeen = localStorage.getItem('tutorialSeen') === 'true';
         if (!tutorialSeen) {
-            this.tutorialText = this.add.text(cx, this.scale.height - 40, '吃掉比你小的數字！\n躲開比你大的數字！', {
+            this.tutorialText = this.add.text(cx, this.scale.height - 40, t('tutorialText'), {
                 fontSize: '20px',
                 align: 'center',
                 color: '#ffff00'
@@ -61,6 +72,49 @@ export class MenuScene extends Phaser.Scene {
         this.scale.on('resize', this.resize, this);
         this.events.once('shutdown', () => {
             this.scale.off('resize', this.resize, this);
+        });
+    }
+
+    private createLanguageToggle(x: number, y: number) {
+        if (this.langBg) this.langBg.destroy();
+        if (this.langZhBtn) this.langZhBtn.destroy();
+        if (this.langDivider) this.langDivider.destroy();
+        if (this.langEnBtn) this.langEnBtn.destroy();
+
+        const currentLang = getLanguage();
+        this.langBg = this.add.rectangle(x, y, 96, 26, 0x001122, 0.8)
+            .setStrokeStyle(1, 0x0088cc)
+            .setDepth(300);
+
+        this.langZhBtn = this.add.text(x - 22, y, '繁中', {
+            fontSize: '13px',
+            fontStyle: currentLang === 'zh-TW' ? 'bold' : 'normal',
+            color: currentLang === 'zh-TW' ? '#ffd700' : '#888888'
+        }).setOrigin(0.5).setDepth(301).setName('langBtn_zh').setInteractive({ useHandCursor: true });
+
+        this.langDivider = this.add.text(x, y, '|', {
+            fontSize: '12px',
+            color: '#446688'
+        }).setOrigin(0.5).setDepth(301);
+
+        this.langEnBtn = this.add.text(x + 22, y, 'EN', {
+            fontSize: '13px',
+            fontStyle: currentLang === 'en' ? 'bold' : 'normal',
+            color: currentLang === 'en' ? '#ffd700' : '#888888'
+        }).setOrigin(0.5).setDepth(301).setName('langBtn_en').setInteractive({ useHandCursor: true });
+
+        this.langZhBtn.on('pointerdown', () => {
+            if (getLanguage() !== 'zh-TW') {
+                setLanguage('zh-TW');
+                this.scene.restart();
+            }
+        });
+
+        this.langEnBtn.on('pointerdown', () => {
+            if (getLanguage() !== 'en') {
+                setLanguage('en');
+                this.scene.restart();
+            }
         });
     }
 
@@ -122,13 +176,16 @@ export class MenuScene extends Phaser.Scene {
         const bg = this.add.rectangle(0, 0, 180, 220, unlocked ? 0x0055aa : 0x333333, 1)
             .setStrokeStyle(4, unlocked ? 0x00ffff : 0x555555);
 
-        const title = this.add.text(0, -60, levelDef.name, {
+        // Translated level title
+        const levelTitleStr = t(`level_${levelId}`);
+        const title = this.add.text(0, -60, levelTitleStr, {
             fontSize: '28px',
             fontStyle: 'bold',
             color: unlocked ? '#ffffff' : '#aaaaaa'
         }).setOrigin(0.5);
 
-        const bossText = this.add.text(0, -10, `BOSS ${levelDef.bossValue}`, {
+        const bossTextStr = t('bossLabel', { value: levelDef.bossValue });
+        const bossText = this.add.text(0, -10, bossTextStr, {
             fontSize: '20px',
             color: unlocked ? '#ff5555' : '#777777'
         }).setOrigin(0.5);
@@ -137,14 +194,14 @@ export class MenuScene extends Phaser.Scene {
 
         if (unlocked) {
             const bestScore = ProgressionManager.getBestScore(levelId);
-            const scoreText = this.add.text(0, 30, `BEST: ${bestScore}`, {
+            const scoreText = this.add.text(0, 30, `${t('bestLabel')}${bestScore}`, {
                 fontSize: '16px',
                 color: '#aaaaaa'
             }).setOrigin(0.5);
             
             const btnBg = this.add.rectangle(0, 80, 120, 40, 0x00aa00, 1).setInteractive({ useHandCursor: true });
             btnBg.setName(`startBtn_${levelId}`);
-            const btnText = this.add.text(0, 80, 'START', { fontSize: '20px', fontStyle: 'bold', color: '#fff' }).setOrigin(0.5);
+            const btnText = this.add.text(0, 80, t('start'), { fontSize: '20px', fontStyle: 'bold', color: '#fff' }).setOrigin(0.5);
             
             btnBg.on('pointerdown', () => {
                 this.openPrep(levelId);
@@ -152,7 +209,7 @@ export class MenuScene extends Phaser.Scene {
             
             container.add([scoreText, btnBg, btnText]);
         } else {
-            const lockText = this.add.text(0, 50, '🔒 LOCKED', {
+            const lockText = this.add.text(0, 50, t('locked'), {
                 fontSize: '24px',
                 color: '#aaaaaa'
             }).setOrigin(0.5);
@@ -179,7 +236,14 @@ export class MenuScene extends Phaser.Scene {
     resize(gameSize: Phaser.Structs.Size) {
         const cx = gameSize.width / 2;
         const cy = gameSize.height / 2;
+        const w = gameSize.width;
         
+        const toggleX = w - 60;
+        const toggleY = 24;
+        if (this.langBg) this.langBg.setPosition(toggleX, toggleY);
+        if (this.langZhBtn) this.langZhBtn.setPosition(toggleX - 22, toggleY);
+        if (this.langDivider) this.langDivider.setPosition(toggleX, toggleY);
+        if (this.langEnBtn) this.langEnBtn.setPosition(toggleX + 22, toggleY);
         if (this.titleText) this.titleText.setPosition(cx, 45);
         if (this.levelSelectText) this.levelSelectText.setPosition(cx, 88);
         if (this.customizeBtnBg) {

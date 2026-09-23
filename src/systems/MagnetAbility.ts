@@ -3,6 +3,7 @@ import { GameBalance } from '../config/gameBalance';
 import { isMagnetEligible } from '../utils/gameRules';
 import { NumberEnemy } from '../entities/NumberEnemy';
 import { CollectibleOrb } from '../entities/CollectibleOrb';
+import { t } from '../i18n';
 
 export type MagnetState = 'READY' | 'ACTIVE' | 'COOLDOWN';
 
@@ -131,12 +132,16 @@ export class MagnetAbility {
 
     getHUDText(): string {
         if (this.state === 'READY') {
-            return '🧲 MAGNET READY';
+            return `🧲 ${t('magnetReady')}`;
         } else if (this.state === 'ACTIVE') {
-            return `🧲 MAGNET ${this.getRemainingSeconds().toFixed(1)}s`;
+            return `🧲 ${t('magnetActive', { time: this.getRemainingSeconds().toFixed(1) })}`;
         } else {
             return `🧲 ${this.getRemainingSeconds().toFixed(1)}s`;
         }
+    }
+
+    resetCooldown() {
+        this.reset();
     }
 
     reset() {

@@ -734,6 +734,8 @@ export class GameScene extends Phaser.Scene {
         this.isUltimatePhase = false;
         this.wheelReward = null;
         this.spawnTimer = 9999999;
+        this.cameras.main.setScroll(0, 0);
+        this.cameras.main.setZoom(1);
         this.updateArenaRanking();
     }
 

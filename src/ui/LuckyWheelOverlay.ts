@@ -201,7 +201,9 @@ export class LuckyWheelOverlay {
         this.faceBossBtnBg.on('pointerdown', () => {
             if (this.selectedReward && this.onCompleteCallback && !this.completed) {
                 this.completed = true;
-                this.faceBossBtnBg.disableInteractive();
+                if (this.faceBossBtnBg && this.faceBossBtnBg.scene && this.faceBossBtnBg.scene.sys) {
+                    try { this.faceBossBtnBg.disableInteractive(); } catch {}
+                }
                 const cb = this.onCompleteCallback;
                 this.onCompleteCallback = undefined;
                 cb(this.selectedReward);
@@ -218,8 +220,10 @@ export class LuckyWheelOverlay {
         this.isSpinning = true;
 
         // Disable spin button immediately
-        this.spinBtnBg.disableInteractive();
-        this.spinBtnBg.setFillStyle(0x444444);
+        if (this.spinBtnBg && this.spinBtnBg.scene && this.spinBtnBg.scene.sys) {
+            try { this.spinBtnBg.disableInteractive(); } catch {}
+            this.spinBtnBg.setFillStyle(0x444444);
+        }
 
         // Select reward: check if forced or random
         let reward: WheelReward;

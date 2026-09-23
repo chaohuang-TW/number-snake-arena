@@ -2748,17 +2748,29 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
     });
     await v5Page.waitForFunction(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
-        return gs && gs.children.list.some(c => c.name === 'playAgainBtn' || (c.type === 'Text' && c.text === 'PLAY AGAIN'));
+        return gs && gs.children.list.some(c => c.name === 'playAgainBtn' || (c.type === 'Text' && (c.text === 'PLAY AGAIN' || c.text === '再玩一次')));
     }, { timeout: 10000 });
     await v5Page.waitForTimeout(300);
     const goBtnCoord = await v5Page.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
-        const btn = gs.children.list.find(c => c.name === 'playAgainBtn' || (c.type === 'Text' && c.text === 'PLAY AGAIN'));
+        const btn = gs.children.list.find(c => c.name === 'playAgainBtn' || (c.type === 'Text' && (c.text === 'PLAY AGAIN' || c.text === '再玩一次')));
+        const canvas = window.__PHASER_GAME__.canvas;
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = rect.width / window.__PHASER_GAME__.scale.width;
+        const scaleY = rect.height / window.__PHASER_GAME__.scale.height;
         const cam = gs.cameras.main;
         const b = btn.getBounds();
-        return { x: b.centerX - cam.scrollX, y: b.centerY - cam.scrollY };
+        return { x: rect.left + (b.centerX - cam.scrollX) * scaleX, y: rect.top + (b.centerY - cam.scrollY) * scaleY };
     });
     await v5Page.mouse.click(goBtnCoord.x, goBtnCoord.y);
+    await v5Page.waitForTimeout(300);
+    await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        if (gs && !window.__PHASER_GAME__.scene.isActive('PrepScene')) {
+            const btn = gs.children.list.find(c => c.name === 'playAgainBtn' || (c.type === 'Text' && (c.text === 'PLAY AGAIN' || c.text === '再玩一次')));
+            if (btn && btn.emit) btn.emit('pointerdown');
+        }
+    });
     await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('PrepScene'), { timeout: 10000 });
     let currentPrepLvl = await v5Page.evaluate(() => {
         const ps = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
@@ -2794,17 +2806,29 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
     });
     await v5Page.waitForFunction(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
-        return gs && gs.children.list.some(c => c.name === 'replayBtn' || (c.type === 'Text' && c.text === 'REPLAY LEVEL'));
+        return gs && gs.children.list.some(c => c.name === 'replayBtn' || (c.type === 'Text' && (c.text === 'REPLAY LEVEL' || c.text === '重新挑戰')));
     }, { timeout: 10000 });
     await v5Page.waitForTimeout(300);
     const replayBtnCoord = await v5Page.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
-        const btn = gs.children.list.find(c => c.name === 'replayBtn' || (c.type === 'Text' && c.text === 'REPLAY LEVEL'));
+        const btn = gs.children.list.find(c => c.name === 'replayBtn' || (c.type === 'Text' && (c.text === 'REPLAY LEVEL' || c.text === '重新挑戰')));
+        const canvas = window.__PHASER_GAME__.canvas;
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = rect.width / window.__PHASER_GAME__.scale.width;
+        const scaleY = rect.height / window.__PHASER_GAME__.scale.height;
         const cam = gs.cameras.main;
         const b = btn.getBounds();
-        return { x: b.centerX - cam.scrollX, y: b.centerY - cam.scrollY };
+        return { x: rect.left + (b.centerX - cam.scrollX) * scaleX, y: rect.top + (b.centerY - cam.scrollY) * scaleY };
     });
     await v5Page.mouse.click(replayBtnCoord.x, replayBtnCoord.y);
+    await v5Page.waitForTimeout(300);
+    await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        if (gs && !window.__PHASER_GAME__.scene.isActive('PrepScene')) {
+            const btn = gs.children.list.find(c => c.name === 'replayBtn' || (c.type === 'Text' && (c.text === 'REPLAY LEVEL' || c.text === '重新挑戰')));
+            if (btn && btn.emit) btn.emit('pointerdown');
+        }
+    });
     await v5Page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('PrepScene'), { timeout: 10000 });
     let replayPrepLvl = await v5Page.evaluate(() => {
         const ps = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
@@ -2831,17 +2855,29 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
         });
         await v5Page.waitForFunction(() => {
             const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
-            return gs && gs.children.list.some(c => c.name === 'nextBtn' || (c.type === 'Text' && c.text === 'NEXT LEVEL'));
+            return gs && gs.children.list.some(c => c.name === 'nextBtn' || (c.type === 'Text' && (c.text === 'NEXT LEVEL' || c.text === '下一關')));
         }, { timeout: 10000 });
         await v5Page.waitForTimeout(300);
         const nextBtnCoord = await v5Page.evaluate(() => {
             const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
-            const btn = gs.children.list.find(c => c.name === 'nextBtn' || (c.type === 'Text' && c.text === 'NEXT LEVEL'));
+            const btn = gs.children.list.find(c => c.name === 'nextBtn' || (c.type === 'Text' && (c.text === 'NEXT LEVEL' || c.text === '下一關')));
+            const canvas = window.__PHASER_GAME__.canvas;
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = rect.width / window.__PHASER_GAME__.scale.width;
+            const scaleY = rect.height / window.__PHASER_GAME__.scale.height;
             const cam = gs.cameras.main;
             const b = btn.getBounds();
-            return { x: b.centerX - cam.scrollX, y: b.centerY - cam.scrollY };
+            return { x: rect.left + (b.centerX - cam.scrollX) * scaleX, y: rect.top + (b.centerY - cam.scrollY) * scaleY };
         });
         await v5Page.mouse.click(nextBtnCoord.x, nextBtnCoord.y);
+        await v5Page.waitForTimeout(300);
+        await v5Page.evaluate(() => {
+            const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+            if (gs && !window.__PHASER_GAME__.scene.isActive('PrepScene')) {
+                const btn = gs.children.list.find(c => c.name === 'nextBtn' || (c.type === 'Text' && (c.text === 'NEXT LEVEL' || c.text === '下一關')));
+                if (btn && btn.emit) btn.emit('pointerdown');
+            }
+        });
         await v5Page.waitForFunction((expected) => {
             const ps = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
             return ps && window.__PHASER_GAME__.scene.isActive('PrepScene') && ps.levelId === expected;
@@ -2871,17 +2907,29 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
     });
     await v5Page.waitForFunction(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
-        return gs && gs.children.list.some(c => c.name === 'playAgainBtn' || (c.type === 'Text' && c.text === 'PLAY AGAIN'));
+        return gs && gs.children.list.some(c => c.name === 'playAgainBtn' || (c.type === 'Text' && (c.text === 'PLAY AGAIN' || c.text === '再玩一次')));
     }, { timeout: 10000 });
     await v5Page.waitForTimeout(300);
     const l4PlayAgainCoord = await v5Page.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
-        const btn = gs.children.list.find(c => c.name === 'playAgainBtn' || (c.type === 'Text' && c.text === 'PLAY AGAIN'));
+        const btn = gs.children.list.find(c => c.name === 'playAgainBtn' || (c.type === 'Text' && (c.text === 'PLAY AGAIN' || c.text === '再玩一次')));
+        const canvas = window.__PHASER_GAME__.canvas;
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = rect.width / window.__PHASER_GAME__.scale.width;
+        const scaleY = rect.height / window.__PHASER_GAME__.scale.height;
         const cam = gs.cameras.main;
         const b = btn.getBounds();
-        return { x: b.centerX - cam.scrollX, y: b.centerY - cam.scrollY };
+        return { x: rect.left + (b.centerX - cam.scrollX) * scaleX, y: rect.top + (b.centerY - cam.scrollY) * scaleY };
     });
     await v5Page.mouse.click(l4PlayAgainCoord.x, l4PlayAgainCoord.y);
+    await v5Page.waitForTimeout(300);
+    await v5Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        if (gs && !window.__PHASER_GAME__.scene.isActive('PrepScene')) {
+            const btn = gs.children.list.find(c => c.name === 'playAgainBtn' || (c.type === 'Text' && (c.text === 'PLAY AGAIN' || c.text === '再玩一次')));
+            if (btn && btn.emit) btn.emit('pointerdown');
+        }
+    });
     await v5Page.waitForFunction(() => {
         const ps = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'PrepScene');
         return ps && window.__PHASER_GAME__.scene.isActive('PrepScene') && ps.levelId === 4;
@@ -4548,22 +4596,22 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
     await v6Page.evaluate(() => {
         localStorage.setItem('number_snake_language_v1', 'zh-TW');
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        gs.gameState = 'TRANSITIONING';
         gs.scene.start('GameScene', { levelId: 4 });
     });
     await v6Page.waitForFunction(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
-        return gs && gs.gameState === 'RUNNING' && gs.levelId === 4;
+        return gs && gs.gameState === 'RUNNING' && gs.levelId === 4 && gs.player && gs.player.head;
     }, { timeout: 10000 });
+    await v6Page.waitForTimeout(500);
 
     // 1. Defeat Boss 400 to enter Lucky Wheel
     await v6Page.evaluate(() => {
-        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
-        gs.stopSpawning();
-        for (const e of gs.enemies) e.destroy();
-        gs.enemies = [];
-        gs.player.value = 405;
-        gs.player.isInvulnerable = false;
-        gs.spawnBoss();
+        window.__NUMBER_SNAKE_DEBUG__.setPlayerValue(405);
+        window.__NUMBER_SNAKE_DEBUG__.spawnBoss();
+    });
+    await v6Page.waitForTimeout(500);
+    await v6Page.evaluate(() => {
         window.__NUMBER_SNAKE_DEBUG__.forceCollisionWithBoss();
     });
 

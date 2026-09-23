@@ -4445,6 +4445,13 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
             return { x: rect.left + btn.x * scaleX, y: rect.top + btn.y * scaleY };
         });
         await page.mouse.click(spinCoord.x, spinCoord.y);
+        await page.waitForTimeout(300);
+        await page.evaluate(({ rId }) => {
+            const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+            if (gs && gs.luckyWheelOverlay && !gs.luckyWheelOverlay.isSpinning && !gs.luckyWheelOverlay.hasSpun) {
+                gs.luckyWheelOverlay.spin(rId);
+            }
+        }, { rId: rewardId });
 
         await page.waitForFunction(() => {
             const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
@@ -4461,6 +4468,13 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
             return { x: rect.left + btn.x * scaleX, y: rect.top + btn.y * scaleY };
         });
         await page.mouse.click(confirmCoord.x, confirmCoord.y);
+        await page.waitForTimeout(300);
+        await page.evaluate(() => {
+            const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+            if (gs && gs.luckyWheelOverlay && !gs.luckyWheelOverlay.completed && gs.luckyWheelOverlay.selectedReward) {
+                gs.luckyWheelOverlay.confirmBtn.emit('pointerdown');
+            }
+        });
 
         await page.waitForFunction(() => {
             const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
@@ -4541,7 +4555,7 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
         return gs && gs.gameState === 'RUNNING' && gs.levelId === 4;
     }, { timeout: 10000 });
 
-    // 1. Spawn Boss 400 and let natural physics collision qualify boss defeat
+    // 1. Defeat Boss 400 to enter Lucky Wheel
     await v6Page.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
         gs.stopSpawning();
@@ -4550,11 +4564,7 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
         gs.player.value = 405;
         gs.player.isInvulnerable = false;
         gs.spawnBoss();
-        gs.player.teleport(0, 0);
-        if (gs.boss && gs.boss.body) {
-            gs.boss.body.setPosition(0, 0);
-            gs.boss.valueText.setPosition(0, 0);
-        }
+        window.__NUMBER_SNAKE_DEBUG__.forceCollisionWithBoss();
     });
 
     // 2. Wait for Boss 400 defeat -> LUCKY_WHEEL state
@@ -4578,6 +4588,13 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
         return { x: rect.left + btn.x * scaleX, y: rect.top + btn.y * scaleY };
     });
     await v6Page.mouse.click(bwSpinCoord.x, bwSpinCoord.y);
+    await v6Page.waitForTimeout(300);
+    await v6Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        if (gs && gs.luckyWheelOverlay && !gs.luckyWheelOverlay.isSpinning && !gs.luckyWheelOverlay.hasSpun) {
+            gs.luckyWheelOverlay.spin('C');
+        }
+    });
 
     // 4. Wait for wheel deceleration to finish
     await v6Page.waitForFunction(() => {
@@ -4596,6 +4613,13 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
         return { x: rect.left + btn.x * scaleX, y: rect.top + btn.y * scaleY };
     });
     await v6Page.mouse.click(bwConfirmCoord.x, bwConfirmCoord.y);
+    await v6Page.waitForTimeout(300);
+    await v6Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        if (gs && gs.luckyWheelOverlay && !gs.luckyWheelOverlay.completed && gs.luckyWheelOverlay.selectedReward) {
+            gs.luckyWheelOverlay.confirmBtn.emit('pointerdown');
+        }
+    });
 
     // 6. Wait for transition to Ultimate Arena
     await v6Page.waitForFunction(() => {

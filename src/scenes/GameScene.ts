@@ -17,7 +17,7 @@ import { BossIndicator } from '../ui/BossIndicator';
 import type { RectBounds } from '../utils/layout';
 import { getRankingResult, type ArenaParticipant, type RankingResult } from '../utils/ranking';
 import { normalizeStartValue } from '../utils/prepValues';
-import { t } from '../i18n';
+import { t, isTraditionalChinese } from '../i18n';
 import { UltimateBoss } from '../entities/UltimateBoss';
 import { LuckyWheelOverlay } from '../ui/LuckyWheelOverlay';
 import { type WheelReward, applyWheelReward } from '../utils/luckyWheel';
@@ -28,6 +28,7 @@ export class GameScene extends Phaser.Scene {
     boss: NumberBoss | null = null;
     ultimateBoss: UltimateBoss | null = null;
     luckyWheelOverlay: LuckyWheelOverlay | null = null;
+    forcedWheelRewardId: string | null = null;
     wheelReward: WheelReward | null = null;
     isUltimatePhase: boolean = false;
     bossIndicator!: BossIndicator;
@@ -271,6 +272,17 @@ export class GameScene extends Phaser.Scene {
                 },
                 // v0.6.0 Debug APIs
                 getLuckyWheelOverlay: () => this.luckyWheelOverlay,
+                setForcedWheelRewardForTest: (id: string) => {
+                    this.forcedWheelRewardId = id;
+                    if (this.luckyWheelOverlay) {
+                        this.luckyWheelOverlay.forcedRewardId = id;
+                    }
+                },
+                setPlayerPositionForTest: (x: number, y: number) => {
+                    if (this.player) {
+                        this.player.teleport(x, y);
+                    }
+                },
                 forceWheelSpin: (rewardId?: string) => this.luckyWheelOverlay ? this.luckyWheelOverlay.spin(rewardId) : null,
                 getUltimateBoss: () => this.ultimateBoss,
                 spawnUltimateBossForTest: () => {
@@ -718,6 +730,7 @@ export class GameScene extends Phaser.Scene {
         if (this.boss) { this.boss.destroy(); this.boss = null; this.bossSpawned = false; }
         if (this.ultimateBoss) { this.ultimateBoss.destroy(); this.ultimateBoss = null; }
         if (this.luckyWheelOverlay) { this.luckyWheelOverlay.destroy(); this.luckyWheelOverlay = null; }
+        this.forcedWheelRewardId = null;
         this.isUltimatePhase = false;
         this.wheelReward = null;
         this.spawnTimer = 9999999;
@@ -990,11 +1003,24 @@ export class GameScene extends Phaser.Scene {
             this.luckyWheelOverlay = null;
             this.transitionToUltimateArena(reward);
         });
+        if (this.forcedWheelRewardId) {
+            this.luckyWheelOverlay.forcedRewardId = this.forcedWheelRewardId;
+        }
     }
 
     transitionToUltimateArena(reward: WheelReward) {
+        if (this.isUltimatePhase) return;
+        this.isUltimatePhase = true;
         this.wheelReward = reward;
         applyWheelReward(this.player, reward, this.magnet);
+        (this as any).__wheelTestSnapshot = {
+            value: this.player.value,
+            hp: this.player.hp,
+            maxHp: this.player.maxHp,
+            boostEnergy: this.player.boostEnergy,
+            segments: this.player.segments,
+            magnetState: this.magnet.state
+        };
 
         // Clear previous enemies and orbs
         for (const e of this.enemies) { e.destroy(); }
@@ -1175,7 +1201,7 @@ export class GameScene extends Phaser.Scene {
             this.add.text(cx, currentY + 20, t('levelRewardHeart'), { fontSize: '32px', fontStyle: 'bold', color: '#ff5555' }).setOrigin(0.5).setDepth(301);
             const oldMax = ProgressionManager.getMaxHP() - this.levelDef.reward!.value;
             const newMax = ProgressionManager.getMaxHP();
-            const heartText = this.add.text(cx, currentY + 60, `${oldMax} HEARTS`, { fontSize: '32px' }).setOrigin(0.5).setDepth(301);
+            const heartText = this.add.text(cx, currentY + 60, isTraditionalChinese() ? `${oldMax} 愛心` : `${oldMax} HEARTS`, { fontSize: '32px' }).setOrigin(0.5).setDepth(301);
             
             this.time.delayedCall(800, () => {
                 heartText.setText(t('heartsTransition', { old: oldMax, new: newMax }));

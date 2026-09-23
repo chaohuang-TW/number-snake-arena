@@ -8,7 +8,7 @@ export const en: Record<TranslationKey, string> = {
     bestLabel: 'BEST: ',
     start: 'START',
     locked: '🔒 LOCKED',
-    tutorialText: '吃掉比你小的數字！\n躲開比你大的數字！',
+    tutorialText: 'Eat numbers smaller than you!\nAvoid numbers bigger than you!',
     langZh: '繁中',
     langEn: 'EN',
 

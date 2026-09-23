@@ -106,4 +106,37 @@ describe('i18n Localization System', () => {
         expect(t('gameOver')).toBe('GAME OVER');
         expect(t('wheelTitle')).toBe('LUCKY WHEEL');
     });
+
+    it('ensures critical English strings contain no CJK characters', () => {
+        const cjkRegex = /[\u3400-\u9FFF]/;
+        const requiredEnglishKeys: (keyof typeof en)[] = [
+            'tutorialText',
+            'menuTitle',
+            'levelSelect',
+            'start',
+            'prepTitle',
+            'gameOver',
+            'wheelTitle',
+            'faceUltimateBoss'
+        ];
+
+        for (const key of requiredEnglishKeys) {
+            const val = en[key];
+            expect(cjkRegex.test(val), `Key "${key}" in en.ts should not contain CJK characters: "${val}"`).toBe(false);
+        }
+
+        expect(en.tutorialText).toBe('Eat numbers smaller than you!\nAvoid numbers bigger than you!');
+        // langZh intentionally displays Chinese ('繁中')
+        expect(en.langZh).toBe('繁中');
+        expect(cjkRegex.test(en.langZh)).toBe(true);
+    });
+
+    it('verifies clean launch defaults to Traditional Chinese canonical strings', () => {
+        resetLanguageStateForTest();
+        expect(getLanguage()).toBe('zh-TW');
+        expect(t('menuTitle')).toBe('數字蛇競技場');
+        expect(t('levelSelect')).toBe('關卡選擇');
+        expect(t('start')).toBe('開始');
+        expect(t('tutorialText')).toBe('吃掉比你小的數字！\n躲開比你大的數字！');
+    });
 });

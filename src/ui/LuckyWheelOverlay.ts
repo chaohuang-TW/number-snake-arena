@@ -156,11 +156,16 @@ export class LuckyWheelOverlay {
         this.container.add([this.spinBtnBg, this.spinBtnText]);
     }
 
+    public get spinBtn(): Phaser.GameObjects.Rectangle {
+        return this.spinBtnBg;
+    }
+
     public get confirmBtn(): Phaser.GameObjects.Rectangle {
         return this.faceBossBtnBg;
     }
 
     private cardBg!: Phaser.GameObjects.Rectangle;
+    public completed: boolean = false;
 
     private createResultSection(x: number, y: number) {
         this.resultContainer = this.scene.add.container(0, 0).setScrollFactor(0).setVisible(false);
@@ -194,8 +199,12 @@ export class LuckyWheelOverlay {
         }).setOrigin(0.5).setScrollFactor(0);
 
         this.faceBossBtnBg.on('pointerdown', () => {
-            if (this.selectedReward && this.onCompleteCallback) {
-                this.onCompleteCallback(this.selectedReward);
+            if (this.selectedReward && this.onCompleteCallback && !this.completed) {
+                this.completed = true;
+                this.faceBossBtnBg.disableInteractive();
+                const cb = this.onCompleteCallback;
+                this.onCompleteCallback = undefined;
+                cb(this.selectedReward);
             }
         });
 

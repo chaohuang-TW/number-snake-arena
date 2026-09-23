@@ -1,32 +1,28 @@
 # NUMBER SNAKE ARENA 🐍
 
-**Version:** `v0.6.0`
-**Status:** Lucky Wheel + Ultimate Boss + i18n Localization. Traditional Chinese (`zh-TW`) is the default language with clean storage fallback and seamless `繁中 | EN` toggle. Level 4 culminates in the procedural 6-reward Lucky Wheel and the Ultimate Boss 500 finale battle.
+**Version:** `v0.6.1`
+**Status:** Localization & Finale Acceptance Closeout. Traditional Chinese (`zh-TW`) is the default language with clean storage fallback, fixed canonical English tutorial text, real physical Lucky Wheel UI interaction acceptance, and production natural physics collision verification for the Ultimate Boss finale.
 
 A web-based arcade game where you control a snake of numbers, growing by eating smaller numbers while avoiding larger ones.
 
 ## Gameplay & Features
 
-* **Traditional Chinese Localization (`zh-TW`)**:
+* **Traditional Chinese Localization (`zh-TW`) & English Purity**:
   * Clean launches default unconditionally to Traditional Chinese (`zh-TW`).
   * Instant, in-scene toggle between `繁中` and `EN` on the main menu without reloading the browser.
+  * Correct canonical English tutorial text ("Eat numbers smaller than you!\nAvoid numbers bigger than you!") with strict verification against CJK character leakage.
   * Centralized key dictionary ensures 100% key parity and seamless parameter substitution across all scenes and overlays.
   * Preserved `number_snake_language_v1` in `localStorage`.
 * **Lucky Wheel Finale (`LuckyWheelOverlay`)**:
   * Unlocks immediately upon defeating Level 4 Boss 400.
   * Procedural 6-segment canvas wheel with deceleration physics and pointer alignment.
-  * Six unique temporary rewards:
-    * **A**: `+100` numeric value
-    * **B**: `+150` numeric value
-    * **C**: `+75` numeric value & Full HP recovery
-    * **D**: `+75` numeric value & Boost 100 energy
-    * **E**: `+75` numeric value & Magnet cooldown reset
-    * **F**: `+200` numeric value & Full HP & Boost 100 energy (Jackpot!)
-  * Strict single-spin guard; rewards do not increase body segments and do not pollute persistent progression.
+  * Verified through real physical pointer interaction (`mouse.click` on `wheelSpinBtn`) and strict single-spin UI protection.
+  * All 6 rewards verified through real production gameplay flow with single-application guarantee and immutable body segment counts.
 * **Ultimate Boss 500 Finale Phase (`UltimateBoss`)**:
   * Follows the Lucky Wheel as the true climax of Level 4.
   * Distinctive dark purple core with rotating outer cosmic rings and dynamic threat aura.
   * Value: `500`. Diameter: `110px`.
+  * Verified through genuine Arcade physics overlap collision detection on live GameScene frames without synthetic force helpers.
   * Multi-state combat pattern:
     * **CHASE**: Normal cruising at 145 px/s toward the player.
     * **DASH**: 700ms telegraph warning line, then 280 px/s burst for 900ms.
@@ -35,6 +31,8 @@ A web-based arcade game where you control a snake of numbers, growing by eating 
   * Arena boundary containment: soft inward steering, Arcade world collision, and 100px hard margin clamp failsafe.
   * Joins live Arena Ranking, proudly holding the #1 gold crown until overtaken.
   * Defeating the Ultimate Boss awards +3000 points and triggers final clear victory.
+* **No Gameplay Rebalance**:
+  * All baseline speeds, damage models, progression tiers, and boss stats remain preserved exactly. No Level 5.
 * **Boss Boundary Protection & Containment**:
   * Soft inward steering and hard clamp failsafe keep all Bosses inside the playable 2400×1600 arena (`[-1100, 1100] × [-700, 700]`).
   * Dynamic off-screen locator (`▶ BOSS <value>` / `▶ 終極首領 500`) points toward off-screen bosses while safely avoiding HUD elements.

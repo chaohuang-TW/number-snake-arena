@@ -17,6 +17,7 @@ export class PlayerSnake {
     
     value: number;
     hp: number;
+    maxHp: number;
     segments: number;
     boostEnergy: number;
     headSkinId: string;
@@ -34,6 +35,7 @@ export class PlayerSnake {
         this.scene = scene;
         this.value = initialValue;
         this.hp = initialHP;
+        this.maxHp = initialHP;
         this.segments = GameBalance.player.initialSegments;
         this.boostEnergy = GameBalance.player.maxBoostEnergy;
 

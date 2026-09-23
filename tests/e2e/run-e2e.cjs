@@ -612,7 +612,7 @@ const baseURL = process.env.BASE_URL || 'http://localhost:3000/';
             // TEST R: Real Reload Persistence Test
             // ==========================================
             console.log('\n--- Test R: Real Reload Persistence Test ---');
-            await page.goto(process.env.BASE_URL + '?debug=1&e2e=1');
+            await page.goto(baseURL + '?debug=1&e2e=1');
             await page.waitForTimeout(1500);
             await page.evaluate(() => { window.__PHASER_GAME__.scene.start('GameScene', { levelId: 1 }); });
             await page.waitForTimeout(1500);
@@ -624,7 +624,7 @@ const baseURL = process.env.BASE_URL || 'http://localhost:3000/';
             const storageState = await page.context().storageState();
             const context2 = await browser.newContext({ storageState });
             const page2 = await context2.newPage();
-            await page2.goto(process.env.BASE_URL + '?debug=1&e2e=1');
+            await page2.goto(baseURL + '?debug=1&e2e=1');
             await page2.waitForTimeout(1500);
             await page2.evaluate(() => { window.__PHASER_GAME__.scene.start('GameScene', { levelId: 1 }); });
             await page2.waitForTimeout(1500);
@@ -4080,22 +4080,50 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
         return {
             title: overlay.titleText.text,
             isSpinning: overlay.isSpinning,
-            hasSpinBtn: overlay.spinBtn !== null
+            hasSpinBtn: overlay.spinBtn !== null,
+            spinBtnVisible: overlay.spinBtn ? overlay.spinBtn.visible : false
         };
     });
     assert(bpWheelCheck.title === '幸運轉盤' || bpWheelCheck.title === 'LUCKY WHEEL', `BP: Wheel title is displayed correctly ("${bpWheelCheck.title}")`);
     assert(bpWheelCheck.isSpinning === false, `BP: Wheel is initially idle`);
+    assert(bpWheelCheck.hasSpinBtn === true && bpWheelCheck.spinBtnVisible === true, `BP: Real wheelSpinBtn is visible`);
 
-    // Spin deterministically to reward 'C' (+75, Full HP)
+    // Set deterministic reward 'C' (+75, Full HP) through debug-only injection
     await v6Page.evaluate(() => {
-        window.__NUMBER_SNAKE_DEBUG__.forceWheelSpin('C');
+        window.__NUMBER_SNAKE_DEBUG__.setForcedWheelRewardForTest('C');
     });
 
-    const bpSpinningState = await v6Page.evaluate(() => {
+    // Calculate actual browser/canvas coordinates for wheelSpinBtn
+    const bpSpinCoord = await v6Page.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
-        return gs.luckyWheelOverlay.isSpinning;
+        const btn = gs.luckyWheelOverlay.spinBtn;
+        const canvas = window.__PHASER_GAME__.canvas;
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = rect.width / window.__PHASER_GAME__.scale.width;
+        const scaleY = rect.height / window.__PHASER_GAME__.scale.height;
+        return {
+            x: rect.left + btn.x * scaleX,
+            y: rect.top + btn.y * scaleY,
+            visible: btn.visible,
+            interactive: !!btn.input && btn.input.enabled
+        };
     });
-    assert(bpSpinningState === true, `BP: Wheel enters spinning state during animation`);
+    assert(bpSpinCoord.visible === true, `BP: Spin button is visible at (${bpSpinCoord.x.toFixed(1)}, ${bpSpinCoord.y.toFixed(1)})`);
+    assert(bpSpinCoord.interactive === true, `BP: Spin button is initially interactive`);
+
+    // Perform REAL mouse click on spin button
+    await v6Page.mouse.click(bpSpinCoord.x, bpSpinCoord.y);
+
+    const bpSpinningCheck = await v6Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        const overlay = gs.luckyWheelOverlay;
+        return {
+            isSpinning: overlay.isSpinning,
+            spinBtnInteractive: !!overlay.spinBtn.input && overlay.spinBtn.input.enabled
+        };
+    });
+    assert(bpSpinningCheck.isSpinning === true, `BP: Wheel enters isSpinning=true after real click`);
+    assert(bpSpinningCheck.spinBtnInteractive === false, `BP: Spin button becomes non-interactive immediately`);
 
     // Wait for spin tween deceleration to complete
     await v6Page.waitForFunction(() => {
@@ -4110,62 +4138,34 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
             isSpinning: overlay.isSpinning,
             rewardApplied: overlay.rewardApplied,
             selectedRewardId: overlay.selectedReward ? overlay.selectedReward.id : null,
-            confirmBtnVisible: overlay.confirmBtn ? overlay.confirmBtn.visible : false
+            rewardText: overlay.resultRewardText ? overlay.resultRewardText.text : '',
+            confirmBtnVisible: overlay.confirmBtn ? overlay.confirmBtn.visible : false,
+            spinBtnVisible: overlay.spinBtn ? overlay.spinBtn.visible : false
         };
     });
     assert(bpResultCheck.isSpinning === false, `BP: Wheel deceleration finishes`);
     assert(bpResultCheck.rewardApplied === true, `BP: Reward application flagged`);
-    assert(bpResultCheck.selectedRewardId === 'C', `BP: Deterministic reward 'C' selected`);
-    assert(bpResultCheck.confirmBtnVisible === true, `BP: Confirmation button appears`);
+    assert(bpResultCheck.selectedRewardId === 'C', `BP: selectedReward.id === C`);
+    assert(bpResultCheck.rewardText.length > 0, `BP: Visual result shows correct C reward ("${bpResultCheck.rewardText}")`);
+    assert(bpResultCheck.confirmBtnVisible === true, `BP: FACE ULTIMATE BOSS button appears`);
+    assert(bpResultCheck.spinBtnVisible === false, `BP: Spin button is hidden after spin finishes`);
 
-    // Verify single-spin enforcement: calling spin() again does not re-spin
-    const bpSecondSpin = await v6Page.evaluate(() => {
+    // Single-spin test: Attempt SECOND REAL click on same spin area/button
+    await v6Page.mouse.click(bpSpinCoord.x, bpSpinCoord.y);
+    const bpSecondClickCheck = await v6Page.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
-        return gs.luckyWheelOverlay.spin('A');
+        const overlay = gs.luckyWheelOverlay;
+        return {
+            isSpinning: overlay.isSpinning,
+            selectedRewardId: overlay.selectedReward ? overlay.selectedReward.id : null,
+            hasSpun: overlay.hasSpun,
+            spinBtnVisible: overlay.spinBtn ? overlay.spinBtn.visible : false
+        };
     });
-    assert(bpSecondSpin === null, `BP: Single spin strictly enforced; secondary spin returned null`);
-
-    // --- Test BQ: All 6 Rewards Verification ---
-    console.log('\n--- Test BQ: All 6 Rewards Verification ---');
-    const bqRewardTests = await v6Page.evaluate(() => {
-        const results = [];
-        const rewards = [
-            { id: 'A', valueBonus: 100 },
-            { id: 'B', valueBonus: 150 },
-            { id: 'C', valueBonus: 75, fullHP: true },
-            { id: 'D', valueBonus: 75, boostMax: true },
-            { id: 'E', valueBonus: 75, magnetReady: true },
-            { id: 'F', valueBonus: 200, fullHP: true, boostMax: true }
-        ];
-
-        for (const r of rewards) {
-            let p = { value: 100, hp: 1, maxHp: 5, boostEnergy: 20, segments: 10 };
-            let magnetReset = false;
-            let fakeMagnet = { resetCooldown: () => { magnetReset = true; } };
-
-            p.value += r.valueBonus;
-            if (r.fullHP) p.hp = p.maxHp;
-            if (r.boostMax) p.boostEnergy = 100;
-            if (r.magnetReady) fakeMagnet.resetCooldown();
-
-            results.push({
-                id: r.id,
-                value: p.value,
-                hp: p.hp,
-                boostEnergy: p.boostEnergy,
-                segments: p.segments,
-                magnetReset
-            });
-        }
-        return results;
-    });
-
-    assert(bqRewardTests[0].value === 200 && bqRewardTests[0].segments === 10, `BQ: Reward A +100 val without segment change`);
-    assert(bqRewardTests[1].value === 250, `BQ: Reward B +150 val`);
-    assert(bqRewardTests[2].value === 175 && bqRewardTests[2].hp === 5, `BQ: Reward C +75 val & Full HP`);
-    assert(bqRewardTests[3].value === 175 && bqRewardTests[3].boostEnergy === 100, `BQ: Reward D +75 val & Boost 100`);
-    assert(bqRewardTests[4].value === 175 && bqRewardTests[4].magnetReset === true, `BQ: Reward E +75 val & Magnet Ready`);
-    assert(bqRewardTests[5].value === 300 && bqRewardTests[5].hp === 5 && bqRewardTests[5].boostEnergy === 100, `BQ: Reward F +200 val & Full HP & Boost 100`);
+    assert(bpSecondClickCheck.isSpinning === false, `BP: Second click does not trigger second spin (isSpinning remains false)`);
+    assert(bpSecondClickCheck.selectedRewardId === 'C', `BP: Reward result remains 'C' without replacement`);
+    assert(bpSecondClickCheck.hasSpun === true, `BP: hasSpun flag strictly preserved`);
+    assert(bpSecondClickCheck.spinBtnVisible === false, `BP: Spin button remains hidden / disabled`);
 
     // --- Test BR: Transition to Ultimate Arena ---
     console.log('\n--- Test BR: Transition to Ultimate Arena ---');
@@ -4292,16 +4292,31 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
     const btPlayerVal = await v6Page.evaluate(() => window.__NUMBER_SNAKE_DEBUG__.getPlayerValue());
     assert(btPlayerVal > 500, `BT: Player grew over 500 by consuming ecosystem enemies, got ${btPlayerVal}`);
 
-    // --- Test BU: Defeat Ultimate Boss 500 & Final Level Clear ---
-    console.log('\n--- Test BU: Defeat Ultimate Boss 500 & Final Level Clear ---');
+    // --- Test BU: Defeat Ultimate Boss 500 & Final Level Clear (Real Physics Collision) ---
+    console.log('\n--- Test BU: Defeat Ultimate Boss 500 & Final Level Clear (Real Physics Collision) ---');
     const buScoreBefore = await v6Page.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
         return gs.hud.getScore();
     });
 
+    // Position Player (Value > 500) and Ultimate Boss so physics bodies overlap naturally on real GameScene frames
     await v6Page.evaluate(() => {
-        window.__NUMBER_SNAKE_DEBUG__.forceCollisionWithUltimateBoss();
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        gs.player.value = 520;
+        gs.player.isInvulnerable = false;
+        gs.player.teleport(0, 0);
+        if (gs.ultimateBoss && gs.ultimateBoss.body) {
+            gs.ultimateBoss.body.setPosition(0, 0);
+            gs.ultimateBoss.valueText.setPosition(0, 0);
+        }
     });
+
+    // Wait until natural physics overlap invokes handleUltimateBossCollision()
+    await v6Page.waitForFunction(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return gs && gs.ultimateBoss === null && gs.gameState === 'LEVEL_CLEAR';
+    }, { timeout: 10000 });
+
     await v6Page.waitForFunction(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
         return gs && gs.children.list.some(c => c.name === 'playAgainBtn');
@@ -4379,6 +4394,341 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
         assert(bvCheck.valid === true, `BV: Scene valid at ${vp.width}x${vp.height}`);
         assert(bvCheck.overlap === false, `BV: No HUD layout overlap at ${vp.width}x${vp.height}`);
     }
+
+    // Helper for executing production wheel reward flow
+    async function executeRealWheelRewardFlow(page, rewardId, baselineSetup) {
+        await page.evaluate(({ rId, setup }) => {
+            const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+            gs.hardReset();
+            gs.levelId = 4;
+            gs.levelDef = window.__PHASER_GAME__.registry.get('level_4') || gs.levelDef;
+            gs.gameState = 'RUNNING';
+            gs.stopSpawning();
+            for (const e of gs.enemies) e.destroy();
+            gs.enemies = [];
+            if (gs.boss) { gs.boss.destroy(); gs.boss = null; gs.bossSpawned = false; }
+            if (gs.ultimateBoss) { gs.ultimateBoss.destroy(); gs.ultimateBoss = null; }
+            if (gs.luckyWheelOverlay) { gs.luckyWheelOverlay.destroy(); gs.luckyWheelOverlay = null; }
+            gs.isUltimatePhase = false;
+
+            gs.player.value = setup.value || 401;
+            gs.player.hp = setup.hp || 3;
+            gs.player.maxHp = setup.maxHp || 6;
+            gs.player.boostEnergy = setup.boostEnergy !== undefined ? setup.boostEnergy : 20;
+            gs.player.segments = setup.segments || 5;
+            if (setup.magnetCooldown) {
+                gs.magnet.state = 'COOLDOWN';
+                gs.magnet.cooldownTimer = 15;
+                gs.magnet.isActive = false;
+            } else {
+                gs.magnet.state = 'READY';
+                gs.magnet.cooldownTimer = 0;
+                gs.magnet.isActive = false;
+            }
+
+            gs.beginLuckyWheelFinale();
+            window.__NUMBER_SNAKE_DEBUG__.setForcedWheelRewardForTest(rId);
+        }, { rId: rewardId, setup: baselineSetup });
+
+        await page.waitForFunction(() => {
+            const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+            return gs && gs.luckyWheelOverlay && gs.luckyWheelOverlay.spinBtn && gs.luckyWheelOverlay.spinBtn.visible;
+        }, { timeout: 5000 });
+
+        const spinCoord = await page.evaluate(() => {
+            const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+            const btn = gs.luckyWheelOverlay.spinBtn;
+            const canvas = window.__PHASER_GAME__.canvas;
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = rect.width / window.__PHASER_GAME__.scale.width;
+            const scaleY = rect.height / window.__PHASER_GAME__.scale.height;
+            return { x: rect.left + btn.x * scaleX, y: rect.top + btn.y * scaleY };
+        });
+        await page.mouse.click(spinCoord.x, spinCoord.y);
+
+        await page.waitForFunction(() => {
+            const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+            return gs && gs.luckyWheelOverlay && gs.luckyWheelOverlay.rewardApplied === true;
+        }, { timeout: 8000 });
+
+        const confirmCoord = await page.evaluate(() => {
+            const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+            const btn = gs.luckyWheelOverlay.confirmBtn;
+            const canvas = window.__PHASER_GAME__.canvas;
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = rect.width / window.__PHASER_GAME__.scale.width;
+            const scaleY = rect.height / window.__PHASER_GAME__.scale.height;
+            return { x: rect.left + btn.x * scaleX, y: rect.top + btn.y * scaleY };
+        });
+        await page.mouse.click(confirmCoord.x, confirmCoord.y);
+
+        await page.waitForFunction(() => {
+            const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+            if (gs && gs.isUltimatePhase === true) {
+                if (!gs.__wheelTestSnapshot) {
+                    gs.__wheelTestSnapshot = {
+                        value: gs.player.value,
+                        hp: gs.player.hp,
+                        maxHp: gs.player.maxHp,
+                        boostEnergy: gs.player.boostEnergy,
+                        segments: gs.player.segments,
+                        magnetState: gs.magnet.state
+                    };
+                }
+                return true;
+            }
+            return false;
+        }, { timeout: 5000 });
+
+        return await page.evaluate(() => {
+            const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+            const snap = gs.__wheelTestSnapshot || {
+                value: gs.player.value,
+                hp: gs.player.hp,
+                maxHp: gs.player.maxHp,
+                boostEnergy: gs.player.boostEnergy,
+                segments: gs.player.segments,
+                magnetState: gs.magnet.state
+            };
+            delete gs.__wheelTestSnapshot;
+            return snap;
+        });
+    }
+
+    // --- Test BQ: Production Rewards Verification (Rewards A, B, C) ---
+    console.log('\n--- Test BQ: Production Rewards Verification (Rewards A, B, C) ---');
+    await v6Page.setViewportSize({ width: 1024, height: 768 });
+    await v6Page.waitForTimeout(200);
+
+    // Reward A (+100 value)
+    const resA = await executeRealWheelRewardFlow(v6Page, 'A', { value: 401, hp: 3, maxHp: 6, boostEnergy: 20, segments: 5 });
+    assert(resA.value === 501, `BQ: Reward A produces Value 501, got ${resA.value}`);
+    assert(resA.hp === 3, `BQ: Reward A leaves HP unchanged at 3, got ${resA.hp}`);
+    assert(resA.boostEnergy === 20, `BQ: Reward A leaves Boost unchanged at 20, got ${resA.boostEnergy}`);
+    assert(resA.segments === 5, `BQ: Reward A leaves body segments unchanged at 5, got ${resA.segments}`);
+
+    // Reward B (+150 value)
+    const resB = await executeRealWheelRewardFlow(v6Page, 'B', { value: 401, hp: 3, maxHp: 6, boostEnergy: 20, segments: 5 });
+    assert(resB.value === 551, `BQ: Reward B produces Value 551, got ${resB.value}`);
+    assert(resB.hp === 3, `BQ: Reward B leaves HP unchanged at 3, got ${resB.hp}`);
+    assert(resB.boostEnergy === 20, `BQ: Reward B leaves Boost unchanged at 20, got ${resB.boostEnergy}`);
+    assert(resB.segments === 5, `BQ: Reward B leaves body segments unchanged at 5, got ${resB.segments}`);
+
+    // Reward C (+75 value, Full HP)
+    const resC = await executeRealWheelRewardFlow(v6Page, 'C', { value: 401, hp: 1, maxHp: 6, boostEnergy: 20, segments: 5 });
+    assert(resC.value === 476, `BQ: Reward C produces Value 476, got ${resC.value}`);
+    assert(resC.hp === 6, `BQ: Reward C restores HP to MaxHP 6, got ${resC.hp}`);
+    assert(resC.boostEnergy === 20, `BQ: Reward C leaves Boost unchanged at 20, got ${resC.boostEnergy}`);
+    assert(resC.segments === 5, `BQ: Reward C leaves body segments unchanged at 5, got ${resC.segments}`);
+
+    // Duplicate apply attempt (Section 19: Reward apply strictly once)
+    const dupVal = await v6Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        gs.transitionToUltimateArena({ id: 'C', valueBonus: 75, fullHP: true, index: 2, labelKey: 'rewardC', color: 0 });
+        return gs.player.value;
+    });
+    assert(dupVal === 476, `BQ: Reward C bonus applied strictly ONCE; duplicate attempt ignored (expected 476, got ${dupVal})`);
+
+    // --- Test BW: Real End-To-End Finale (zh-TW) ---
+    console.log('\n--- Test BW: Real End-To-End Finale (zh-TW) ---');
+    await v6Page.evaluate(() => {
+        localStorage.setItem('number_snake_language_v1', 'zh-TW');
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        gs.scene.start('GameScene', { levelId: 4 });
+    });
+    await v6Page.waitForFunction(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return gs && gs.gameState === 'RUNNING' && gs.levelId === 4;
+    }, { timeout: 10000 });
+
+    // 1. Spawn Boss 400 and let natural physics collision qualify boss defeat
+    await v6Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        gs.stopSpawning();
+        for (const e of gs.enemies) e.destroy();
+        gs.enemies = [];
+        gs.player.value = 405;
+        gs.player.isInvulnerable = false;
+        gs.spawnBoss();
+        gs.player.teleport(0, 0);
+        if (gs.boss && gs.boss.body) {
+            gs.boss.body.setPosition(0, 0);
+            gs.boss.valueText.setPosition(0, 0);
+        }
+    });
+
+    // 2. Wait for Boss 400 defeat -> LUCKY_WHEEL state
+    await v6Page.waitForFunction(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return gs && gs.gameState === 'LUCKY_WHEEL' && gs.luckyWheelOverlay !== null;
+    }, { timeout: 8000 });
+
+    // 3. Set deterministic reward and click real spin button
+    await v6Page.evaluate(() => {
+        window.__NUMBER_SNAKE_DEBUG__.setForcedWheelRewardForTest('C');
+    });
+
+    const bwSpinCoord = await v6Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        const btn = gs.luckyWheelOverlay.spinBtn;
+        const canvas = window.__PHASER_GAME__.canvas;
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = rect.width / window.__PHASER_GAME__.scale.width;
+        const scaleY = rect.height / window.__PHASER_GAME__.scale.height;
+        return { x: rect.left + btn.x * scaleX, y: rect.top + btn.y * scaleY };
+    });
+    await v6Page.mouse.click(bwSpinCoord.x, bwSpinCoord.y);
+
+    // 4. Wait for wheel deceleration to finish
+    await v6Page.waitForFunction(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return gs && gs.luckyWheelOverlay && gs.luckyWheelOverlay.rewardApplied === true;
+    }, { timeout: 8000 });
+
+    // 5. Real click 迎戰終極首領 (confirm button)
+    const bwConfirmCoord = await v6Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        const btn = gs.luckyWheelOverlay.confirmBtn;
+        const canvas = window.__PHASER_GAME__.canvas;
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = rect.width / window.__PHASER_GAME__.scale.width;
+        const scaleY = rect.height / window.__PHASER_GAME__.scale.height;
+        return { x: rect.left + btn.x * scaleX, y: rect.top + btn.y * scaleY };
+    });
+    await v6Page.mouse.click(bwConfirmCoord.x, bwConfirmCoord.y);
+
+    // 6. Wait for transition to Ultimate Arena
+    await v6Page.waitForFunction(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return gs && gs.isUltimatePhase === true;
+    }, { timeout: 5000 });
+
+    // 7. Grow > 500 using natural edible enemy collision
+    await v6Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        // Player has 405 + 75 = 480 value
+        if (gs.enemies.length > 0) {
+            const e = gs.enemies[0];
+            e.value = 35; // 480 + 35 = 515 > 500
+            e.body.setPosition(gs.player.head.x, gs.player.head.y);
+        }
+    });
+
+    await v6Page.waitForFunction(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return gs && gs.player && gs.player.value > 500;
+    }, { timeout: 5000 });
+
+    // 8. Natural physics collision with Ultimate Boss 500
+    await v6Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        if (gs.ultimateBoss && gs.ultimateBoss.body) {
+            gs.ultimateBoss.body.setPosition(gs.player.head.x, gs.player.head.y);
+            gs.ultimateBoss.valueText.setPosition(gs.player.head.x, gs.player.head.y);
+        }
+    });
+
+    await v6Page.waitForFunction(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return gs && gs.gameState === 'LEVEL_CLEAR' && gs.ultimateBoss === null;
+    }, { timeout: 10000 });
+
+    // Wait for showLevelClearScreen (1000ms delay) to render final banner and buttons
+    await v6Page.waitForFunction(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        return gs && gs.children.list.some(c => c.type === 'Text' && c.text && c.text.includes('全部關卡完成'));
+    }, { timeout: 10000 });
+
+    // 9. Assert final victory texts in zh-TW
+    const bwFinal = await v6Page.evaluate(() => {
+        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+        const texts = gs.children.list.filter(c => c.type === 'Text' && c.depth >= 300).map(t => t.text);
+        const highest = window.__NUMBER_SNAKE_DEBUG__.getProgression().highestUnlockedLevel;
+        return {
+            hasLevelClear: texts.some(t => t.includes('完成') || t.includes('第 4 關完成')),
+            hasAllClear: texts.some(t => t.includes('全部關卡完成！')),
+            hasMasterTitle: texts.some(t => t.includes('你成為數字王者！')),
+            highest
+        };
+    });
+
+    assert(bwFinal.hasLevelClear, `BW: Level 4 clear text displayed ("第 4 關完成！")`);
+    assert(bwFinal.hasAllClear, `BW: Final clear banner displayed ("全部關卡完成！")`);
+    assert(bwFinal.hasMasterTitle, `BW: Master title displayed ("你成為數字王者！")`);
+    assert(bwFinal.highest === 4, `BW: Progression highest unlocked level strictly caps at 4 (NO LEVEL 5)`);
+
+    // --- Test BX: English Tutorial Purity ---
+    console.log('\n--- Test BX: English Tutorial Purity ---');
+    const bxContext = await browser.newContext({ viewport: { width: 1024, height: 768 } });
+    await bxContext.addInitScript(() => {
+        localStorage.clear();
+        localStorage.setItem('number_snake_language_v1', 'en');
+        localStorage.setItem('tutorialSeen', 'false');
+    });
+    const bxPage = await bxContext.newPage();
+    await bxPage.goto(baseURL + '?debug=1&e2e=1');
+    await bxPage.waitForFunction(() => window.__PHASER_GAME__ && window.__PHASER_GAME__.scene.isActive('MenuScene'), { timeout: 10000 });
+
+    const bxTutorial = await bxPage.evaluate(() => {
+        const ms = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'MenuScene');
+        return ms && ms.tutorialText ? ms.tutorialText.text : null;
+    });
+
+    assert(bxTutorial !== null, `BX: Tutorial text is displayed when tutorialSeen is false`);
+    assert(bxTutorial.includes('Eat numbers smaller than you!'), `BX: Contains "Eat numbers smaller than you!", got "${bxTutorial}"`);
+    assert(bxTutorial.includes('Avoid numbers bigger than you!'), `BX: Contains "Avoid numbers bigger than you!", got "${bxTutorial}"`);
+    assert(!/[\u3400-\u9FFF]/.test(bxTutorial), `BX: English tutorial strictly contains NO Chinese characters`);
+    await bxContext.close();
+
+    // --- Test BY: Clean Launch Defaults to Traditional Chinese ---
+    console.log('\n--- Test BY: Clean Launch Defaults to Traditional Chinese ---');
+    const byContext = await browser.newContext({ viewport: { width: 1024, height: 768 } });
+    await byContext.addInitScript(() => {
+        localStorage.clear();
+    });
+    const byPage = await byContext.newPage();
+    await byPage.goto(baseURL + '?debug=1&e2e=1');
+    await byPage.waitForFunction(() => window.__PHASER_GAME__ && window.__PHASER_GAME__.scene.isActive('MenuScene'), { timeout: 10000 });
+
+    const byCheck = await byPage.evaluate(() => {
+        const ms = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'MenuScene');
+        return {
+            title: ms.titleText ? ms.titleText.text : '',
+            levelSelect: ms.levelSelectText ? ms.levelSelectText.text : '',
+            startBtn: ms.levelCards && ms.levelCards[0] ? ms.levelCards[0].list.find(c => c.type === 'Text' && c.text === '開始')?.text : '',
+            tutorial: ms.tutorialText ? ms.tutorialText.text : ''
+        };
+    });
+
+    assert(byCheck.title === '數字蛇競技場', `BY: Clean launch defaults to "數字蛇競技場", got "${byCheck.title}"`);
+    assert(byCheck.levelSelect === '關卡選擇', `BY: Level select title is "關卡選擇", got "${byCheck.levelSelect}"`);
+    assert(byCheck.startBtn === '開始', `BY: Card start button is "開始", got "${byCheck.startBtn}"`);
+    assert(byCheck.tutorial.includes('吃掉比你小的數字！') && byCheck.tutorial.includes('躲開比你大的數字！'),
+        `BY: Tutorial is Traditional Chinese, got "${byCheck.tutorial}"`);
+    await byContext.close();
+
+    // --- Test BZ: Production Rewards Verification (Rewards D, E, F) ---
+    console.log('\n--- Test BZ: Production Rewards Verification (Rewards D, E, F) ---');
+
+    // Reward D (+75 value, Boost 100)
+    const resD = await executeRealWheelRewardFlow(v6Page, 'D', { value: 401, hp: 3, maxHp: 6, boostEnergy: 20, segments: 5 });
+    assert(resD.value === 476, `BZ: Reward D produces Value 476, got ${resD.value}`);
+    assert(resD.hp === 3, `BZ: Reward D leaves HP unchanged at 3, got ${resD.hp}`);
+    assert(resD.boostEnergy === 100, `BZ: Reward D fills Boost Energy to 100, got ${resD.boostEnergy}`);
+    assert(resD.segments === 5, `BZ: Reward D leaves body segments unchanged at 5, got ${resD.segments}`);
+
+    // Reward E (+75 value, Magnet Ready)
+    const resE = await executeRealWheelRewardFlow(v6Page, 'E', { value: 401, hp: 3, maxHp: 6, boostEnergy: 20, segments: 5, magnetCooldown: true });
+    assert(resE.value === 476, `BZ: Reward E produces Value 476, got ${resE.value}`);
+    assert(resE.magnetState === 'READY', `BZ: Reward E immediately resets Magnet to READY, got ${resE.magnetState}`);
+    assert(resE.segments === 5, `BZ: Reward E leaves body segments unchanged at 5, got ${resE.segments}`);
+
+    // Reward F (+200 value, Full HP, Boost 100)
+    const resF = await executeRealWheelRewardFlow(v6Page, 'F', { value: 401, hp: 1, maxHp: 6, boostEnergy: 20, segments: 5 });
+    assert(resF.value === 601, `BZ: Reward F produces Value 601, got ${resF.value}`);
+    assert(resF.hp === 6, `BZ: Reward F restores HP to MaxHP 6, got ${resF.hp}`);
+    assert(resF.boostEnergy === 100, `BZ: Reward F fills Boost Energy to 100, got ${resF.boostEnergy}`);
+    assert(resF.segments === 5, `BZ: Reward F leaves body segments unchanged at 5, got ${resF.segments}`);
 
     await v6Context.close();
 

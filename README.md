@@ -1,7 +1,7 @@
 # NUMBER SNAKE ARENA 🐍
 
-**Version:** `v0.6.1`
-**Status:** Localization & Finale Acceptance Closeout. Traditional Chinese (`zh-TW`) is the default language with clean storage fallback, fixed canonical English tutorial text, real physical Lucky Wheel UI interaction acceptance, and production natural physics collision verification for the Ultimate Boss finale.
+**Version:** `v0.6.2`
+**Status:** Physical Acceptance & Release Seal. Complete elimination of synthetic UI and physics fallbacks across canonical E2E test suites. Real coordinate mouse clicks, live Arcade physics overlap collisions, and production single-spin/duplicate-confirm protections sealed.
 
 A web-based arcade game where you control a snake of numbers, growing by eating smaller numbers while avoiding larger ones.
 

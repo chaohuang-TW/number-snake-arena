@@ -734,8 +734,13 @@ export class GameScene extends Phaser.Scene {
         this.isUltimatePhase = false;
         this.wheelReward = null;
         this.spawnTimer = 9999999;
-        this.cameras.main.setScroll(0, 0);
-        this.cameras.main.setZoom(1);
+        if (this.cameras && this.cameras.main) {
+            this.cameras.main.setScroll(0, 0);
+            this.cameras.main.setZoom(1);
+            if (this.player && this.player.head) {
+                this.cameras.main.startFollow(this.player.head, true, 0.1, 0.1);
+            }
+        }
         this.updateArenaRanking();
     }
 
@@ -999,7 +1004,9 @@ export class GameScene extends Phaser.Scene {
         this.gameState = 'LUCKY_WHEEL';
         if (this.worldCrown) this.worldCrown.setVisible(false);
         if (this.bossIndicator) this.bossIndicator.hide();
-        this.player.head.setVelocity(0, 0);
+        if (this.player && this.player.head && (this.player.head as any).body) {
+            this.player.head.setVelocity(0, 0);
+        }
         this.luckyWheelOverlay = new LuckyWheelOverlay(this, (reward) => {
             this.luckyWheelOverlay?.destroy();
             this.luckyWheelOverlay = null;
@@ -1143,6 +1150,8 @@ export class GameScene extends Phaser.Scene {
 
     levelClear() {
         this.gameState = 'LEVEL_CLEAR';
+        if (this.cameras && this.cameras.main) this.cameras.main.stopFollow();
+        if (this.player && this.player.head && (this.player.head as any).body) this.player.head.setVelocity(0, 0);
         if (this.bossIndicator) this.bossIndicator.hide();
         this.saveScore();
         this.clearOrbs();
@@ -1288,6 +1297,8 @@ export class GameScene extends Phaser.Scene {
 
     gameOver() {
         this.gameState = 'GAME_OVER';
+        if (this.cameras && this.cameras.main) this.cameras.main.stopFollow();
+        if (this.player && this.player.head && (this.player.head as any).body) this.player.head.setVelocity(0, 0);
         if (this.bossIndicator) this.bossIndicator.hide();
         if (this.worldCrown) this.worldCrown.setVisible(false);
         this.clearOrbs();
@@ -1298,6 +1309,8 @@ export class GameScene extends Phaser.Scene {
 
     victory() {
         this.gameState = 'VICTORY';
+        if (this.cameras && this.cameras.main) this.cameras.main.stopFollow();
+        if (this.player && this.player.head && (this.player.head as any).body) this.player.head.setVelocity(0, 0);
         if (this.bossIndicator) this.bossIndicator.hide();
         if (this.worldCrown) this.worldCrown.setVisible(false);
         this.clearOrbs();

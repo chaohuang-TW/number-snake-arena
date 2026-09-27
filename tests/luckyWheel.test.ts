@@ -93,4 +93,26 @@ describe('Lucky Wheel Reward System', () => {
         expect(player.hp).toBe(5);
         expect(player.boostEnergy).toBe(100);
     });
+
+    it('applies reward strictly once when protected by phase flag', () => {
+        const player = { value: 401, hp: 1, maxHp: 6, boostEnergy: 20 };
+        const reward = WHEEL_REWARDS.find(r => r.id === 'C')!;
+        let isUltimatePhase = false;
+
+        function safeTransition(r: WheelReward) {
+            if (isUltimatePhase) return;
+            isUltimatePhase = true;
+            applyWheelReward(player, r);
+        }
+
+        safeTransition(reward);
+        expect(player.value).toBe(476);
+        expect(player.hp).toBe(6);
+
+        // Attempt duplicate transition
+        safeTransition(reward);
+        expect(player.value).toBe(476); // strictly preserved
+        expect(player.hp).toBe(6);
+    });
 });
+

@@ -735,10 +735,14 @@ export class GameScene extends Phaser.Scene {
         this.wheelReward = null;
         this.spawnTimer = 9999999;
         if (this.cameras && this.cameras.main) {
+            this.cameras.main.stopFollow();
             this.cameras.main.setScroll(0, 0);
             this.cameras.main.setZoom(1);
-            if (this.player && this.player.head) {
-                this.cameras.main.startFollow(this.player.head, true, 0.1, 0.1);
+        }
+        if (this.player && this.player.head) {
+            this.player.teleport(0, 0);
+            if ((this.player.head as any).body) {
+                this.player.head.setVelocity(0, 0);
             }
         }
         this.updateArenaRanking();
@@ -1004,6 +1008,9 @@ export class GameScene extends Phaser.Scene {
         this.gameState = 'LUCKY_WHEEL';
         if (this.worldCrown) this.worldCrown.setVisible(false);
         if (this.bossIndicator) this.bossIndicator.hide();
+        if (this.cameras && this.cameras.main) {
+            this.cameras.main.stopFollow();
+        }
         if (this.player && this.player.head && (this.player.head as any).body) {
             this.player.head.setVelocity(0, 0);
         }
@@ -1020,6 +1027,9 @@ export class GameScene extends Phaser.Scene {
     transitionToUltimateArena(reward: WheelReward) {
         if (this.isUltimatePhase) return;
         this.isUltimatePhase = true;
+        if (this.cameras && this.cameras.main && this.player && this.player.head) {
+            this.cameras.main.startFollow(this.player.head, true, 0.1, 0.1);
+        }
         this.wheelReward = reward;
         applyWheelReward(this.player, reward, this.magnet);
         (this as any).__wheelTestSnapshot = {

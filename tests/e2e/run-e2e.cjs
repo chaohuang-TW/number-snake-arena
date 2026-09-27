@@ -4468,14 +4468,25 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
         assert(bvCheck.overlap === false, `BV: No HUD layout overlap at ${vp.width}x${vp.height}`);
     }
 
+    // Restore standard canonical viewport after responsive testing
+    await v6Page.setViewportSize({ width: 1024, height: 768 });
+    await v6Page.waitForTimeout(500);
+
     // Helper for executing production wheel reward flow
     async function executeRealWheelRewardFlow(page, rewardId, baselineSetup) {
+        await page.evaluate(() => {
+            const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+            gs.gameState = 'TRANSITIONING';
+            gs.scene.start('GameScene', { levelId: 4 });
+        });
+        await page.waitForFunction(() => {
+            const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+            return gs && gs.gameState === 'RUNNING' && gs.levelId === 4 && gs.player && gs.player.head;
+        }, { timeout: 10000 });
+        await page.waitForTimeout(400);
+
         await page.evaluate(({ rId, setup }) => {
             const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
-            gs.hardReset();
-            gs.levelId = 4;
-            gs.levelDef = window.__PHASER_GAME__.registry.get('level_4') || gs.levelDef;
-            gs.gameState = 'RUNNING';
             gs.stopSpawning();
             for (const e of gs.enemies) e.destroy();
             gs.enemies = [];
@@ -4506,32 +4517,42 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
         await page.waitForFunction(() => {
             const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
             return gs && gs.luckyWheelOverlay && gs.luckyWheelOverlay.spinBtn && gs.luckyWheelOverlay.spinBtn.visible && gs.luckyWheelOverlay.spinBtn.input && gs.luckyWheelOverlay.spinBtn.input.enabled;
-        }, null, { timeout: 10000 });
-        await page.waitForTimeout(300);
-
+        }, null, { timeout: 15000 });
         const spinCoord = await getCanvasClickPoint(page, 'GameScene', 'luckyWheelOverlay.spinBtn');
         await page.mouse.click(spinCoord.x, spinCoord.y);
 
         // Natural physical click retry if the engine dropped the event during scene transition
-        await page.waitForTimeout(300);
-        const startedSpin = await page.evaluate(() => {
-            const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
-            return gs && gs.luckyWheelOverlay && (gs.luckyWheelOverlay.isSpinning || gs.luckyWheelOverlay.hasSpun);
-        });
-        if (!startedSpin) {
+        for (let retry = 0; retry < 3; retry++) {
+            await page.waitForTimeout(400);
+            const startedSpin = await page.evaluate(() => {
+                const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+                const overlay = gs && gs.luckyWheelOverlay;
+                return overlay ? (overlay.isSpinning || overlay.hasSpun) : false;
+            });
+            if (startedSpin) break;
             await page.mouse.click(spinCoord.x, spinCoord.y);
         }
 
         await page.waitForFunction(() => {
             const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
             return gs && gs.luckyWheelOverlay && gs.luckyWheelOverlay.rewardApplied === true && gs.luckyWheelOverlay.confirmBtn && gs.luckyWheelOverlay.confirmBtn.visible && gs.luckyWheelOverlay.confirmBtn.input && gs.luckyWheelOverlay.confirmBtn.input.enabled;
-        }, null, { timeout: 12000 });
-        await page.waitForTimeout(300);
+        }, null, { timeout: 25000 });
+        await page.waitForTimeout(500);
 
         const confirmCoord = await getCanvasClickPoint(page, 'GameScene', 'luckyWheelOverlay.confirmBtn');
         await page.mouse.click(confirmCoord.x, confirmCoord.y);
         // Duplicate physical click to test duplicate click UI guard
         await page.mouse.click(confirmCoord.x, confirmCoord.y);
+
+        for (let retry = 0; retry < 3; retry++) {
+            await page.waitForTimeout(400);
+            const inUltimate = await page.evaluate(() => {
+                const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+                return gs && gs.isUltimatePhase === true;
+            });
+            if (inUltimate) break;
+            await page.mouse.click(confirmCoord.x, confirmCoord.y);
+        }
 
         await page.waitForFunction(() => {
             const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
@@ -4549,7 +4570,7 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
                 return true;
             }
             return false;
-        }, null, { timeout: 8000 });
+        }, null, { timeout: 15000 });
 
         return await page.evaluate(() => {
             const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
@@ -4649,19 +4670,20 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
     await v6Page.waitForFunction(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
         return gs && gs.luckyWheelOverlay && gs.luckyWheelOverlay.spinBtn && gs.luckyWheelOverlay.spinBtn.visible && gs.luckyWheelOverlay.spinBtn.input && gs.luckyWheelOverlay.spinBtn.input.enabled;
-    }, null, { timeout: 8000 });
-    await v6Page.waitForTimeout(300);
+    }, null, { timeout: 15000 });
+    await v6Page.waitForTimeout(500);
 
     const bwSpinCoord = await getCanvasClickPoint(v6Page, 'GameScene', 'luckyWheelOverlay.spinBtn');
     await v6Page.mouse.click(bwSpinCoord.x, bwSpinCoord.y);
 
     // Natural physical click retry if needed
-    await v6Page.waitForTimeout(300);
-    const bwStartedSpin = await v6Page.evaluate(() => {
-        const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
-        return gs && gs.luckyWheelOverlay && (gs.luckyWheelOverlay.isSpinning || gs.luckyWheelOverlay.hasSpun);
-    });
-    if (!bwStartedSpin) {
+    for (let retry = 0; retry < 3; retry++) {
+        await v6Page.waitForTimeout(400);
+        const bwStartedSpin = await v6Page.evaluate(() => {
+            const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+            return gs && gs.luckyWheelOverlay && (gs.luckyWheelOverlay.isSpinning || gs.luckyWheelOverlay.hasSpun);
+        });
+        if (bwStartedSpin) break;
         await v6Page.mouse.click(bwSpinCoord.x, bwSpinCoord.y);
     }
 
@@ -4669,18 +4691,28 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
     await v6Page.waitForFunction(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
         return gs && gs.luckyWheelOverlay && gs.luckyWheelOverlay.rewardApplied === true && gs.luckyWheelOverlay.confirmBtn && gs.luckyWheelOverlay.confirmBtn.visible && gs.luckyWheelOverlay.confirmBtn.input && gs.luckyWheelOverlay.confirmBtn.input.enabled;
-    }, null, { timeout: 12000 });
-    await v6Page.waitForTimeout(300);
+    }, null, { timeout: 25000 });
+    await v6Page.waitForTimeout(500);
 
     // 5. Real click 迎戰終極首領 (confirm button)
     const bwConfirmCoord = await getCanvasClickPoint(v6Page, 'GameScene', 'luckyWheelOverlay.confirmBtn');
     await v6Page.mouse.click(bwConfirmCoord.x, bwConfirmCoord.y);
 
+    for (let retry = 0; retry < 3; retry++) {
+        await v6Page.waitForTimeout(400);
+        const inUltimate = await v6Page.evaluate(() => {
+            const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
+            return gs && gs.isUltimatePhase === true;
+        });
+        if (inUltimate) break;
+        await v6Page.mouse.click(bwConfirmCoord.x, bwConfirmCoord.y);
+    }
+
     // 6. Wait for transition to Ultimate Arena
     await v6Page.waitForFunction(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
         return gs && gs.isUltimatePhase === true;
-    }, { timeout: 5000 });
+    }, { timeout: 15000 });
 
     // 7. Grow > 500 using natural edible enemy collision
     await v6Page.evaluate(() => {

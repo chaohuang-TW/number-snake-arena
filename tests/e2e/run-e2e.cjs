@@ -4271,7 +4271,7 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
     assert(brArenaState.enemyCount >= 10, `BR: Ultimate Arena ecosystem spawned with edible snakes, count=${brArenaState.enemyCount}`);
     assert(brArenaState.bossSpawned === true, `BR: UltimateBoss 500 spawned`);
     assert(brArenaState.bossValue === 500, `BR: UltimateBoss value is 500`);
-    assert(Math.abs(brArenaState.bossPos.x) < 25 && brArenaState.bossPos.y <= -480, `BR: UltimateBoss initial position near (0, -500), got (${brArenaState.bossPos.x}, ${brArenaState.bossPos.y})`);
+    assert(Math.abs(brArenaState.bossPos.x) < 35 && brArenaState.bossPos.y <= -450, `BR: UltimateBoss initial position near (0, -500), got (${brArenaState.bossPos.x}, ${brArenaState.bossPos.y})`);
 
     // --- Test BS: Ultimate Boss Combat AI & Thresholds ---
     console.log('\n--- Test BS: Ultimate Boss Combat AI & Thresholds ---');

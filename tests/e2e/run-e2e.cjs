@@ -3865,6 +3865,8 @@ console.log('\\n✅ ALL E2E TESTS PASSED SUCCESSFULLY');
     const bjState3 = await v5Page.evaluate(() => {
         const gs = window.__PHASER_GAME__.scene.scenes.find(s => s.scene.key === 'GameScene');
         gs.player.head.setPosition(0, 0);
+        if (gs.player.head.body) gs.player.head.body.setVelocity(0, 0);
+        if (gs.boss.body && gs.boss.body.body) gs.boss.body.body.setVelocity(0, 0);
         gs.boss.body.setPosition(50, 50);
         gs.boss.valueText.setPosition(50, 50);
         gs.bossIndicator.update(gs.boss, gs.cameras.main, gs.getObstacleBounds());

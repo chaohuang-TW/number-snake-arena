@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { getTailScale } from '../src/utils/gameRules';
+import { calculateRenderSegments } from '../src/systems/SnakePath';
 
 describe('Snake Tapered Tail', () => {
     it('scales correctly for a 5-segment snake', () => {
@@ -39,5 +40,15 @@ describe('Snake Tapered Tail', () => {
 
         expect(() => getTailScale(0, 0)).not.toThrow();
         expect(getTailScale(0, 0)).toBe(1.0);
+    });
+
+    it('tapers only the final three samples even as Value changes drawing count', () => {
+        for (const value of [5, 10, 50, 100, 500, 1000000]) {
+            const count = calculateRenderSegments(value);
+            expect(getTailScale(count - 3, count)).toBe(0.85);
+            expect(getTailScale(count - 2, count)).toBe(0.65);
+            expect(getTailScale(count - 1, count)).toBe(0.5);
+            for (let i = 0; i < count - 3; i++) expect(getTailScale(i, count)).toBe(1);
+        }
     });
 });

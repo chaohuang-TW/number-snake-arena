@@ -2,255 +2,74 @@ import Phaser from 'phaser';
 import { ProgressionManager } from '../models/Progression';
 import { LEVELS } from '../config/levels';
 import { t, getLanguage, setLanguage } from '../i18n';
+import { arcadeButton, roundedPanel, sceneBackdrop, safeInsets, uiText, ARCADE } from '../ui/ArcadeStyle';
 
 export class MenuScene extends Phaser.Scene {
-    private titleText!: Phaser.GameObjects.Text;
-    private levelSelectText!: Phaser.GameObjects.Text;
-    private customizeBtnBg!: Phaser.GameObjects.Rectangle;
-    private customizeBtnText!: Phaser.GameObjects.Text;
     public levelCards: Phaser.GameObjects.Container[] = [];
     public tutorialText!: Phaser.GameObjects.Text;
-
-    // Language switch
-    private langBg!: Phaser.GameObjects.Rectangle;
-    private langZhBtn!: Phaser.GameObjects.Text;
-    private langDivider!: Phaser.GameObjects.Text;
-    private langEnBtn!: Phaser.GameObjects.Text;
-
-    constructor() {
-        super('MenuScene');
-    }
-
+    constructor() { super('MenuScene'); }
     create() {
         ProgressionManager.load();
-        
-        const cx = this.scale.width / 2;
-        const cy = this.scale.height / 2;
-        const w = this.scale.width;
-
-        // Language toggle top right
-        this.createLanguageToggle(w - 60, 24);
-
-        this.titleText = this.add.text(cx, 45, t('menuTitle'), {
-            fontSize: '36px',
-            fontStyle: 'bold',
-            color: '#00ffff'
-        }).setOrigin(0.5);
-
-        this.levelSelectText = this.add.text(cx, 88, t('levelSelect'), {
-            fontSize: '22px',
-            color: '#ffffff'
-        }).setOrigin(0.5);
-
-        // Customize button
-        this.customizeBtnBg = this.add.rectangle(cx, 126, 160, 32, 0x0055aa, 0.9)
-            .setStrokeStyle(2, 0x00ffff)
-            .setInteractive({ useHandCursor: true });
-        this.customizeBtnText = this.add.text(cx, 126, t('customize'), {
-            fontSize: '16px',
-            fontStyle: 'bold',
-            color: '#ffffff'
-        }).setOrigin(0.5);
-
-        this.customizeBtnBg.on('pointerdown', () => {
-            this.scene.start('CustomizeScene');
-        });
-
-        this.createLevelCards(cx, cy);
-
-        // Tutorial
-        const tutorialSeen = localStorage.getItem('tutorialSeen') === 'true';
-        if (!tutorialSeen) {
-            this.tutorialText = this.add.text(cx, this.scale.height - 40, t('tutorialText'), {
-                fontSize: '20px',
-                align: 'center',
-                color: '#ffff00'
-            }).setOrigin(0.5);
-            localStorage.setItem('tutorialSeen', 'true');
-        }
-
+        this.render();
         this.scale.on('resize', this.resize, this);
-        this.events.once('shutdown', () => {
-            this.scale.off('resize', this.resize, this);
-        });
+        this.events.once('shutdown', () => this.scale.off('resize', this.resize, this));
     }
-
-    private createLanguageToggle(x: number, y: number) {
-        if (this.langBg) this.langBg.destroy();
-        if (this.langZhBtn) this.langZhBtn.destroy();
-        if (this.langDivider) this.langDivider.destroy();
-        if (this.langEnBtn) this.langEnBtn.destroy();
-
-        const currentLang = getLanguage();
-        this.langBg = this.add.rectangle(x, y, 96, 26, 0x001122, 0.8)
-            .setStrokeStyle(1, 0x0088cc)
-            .setDepth(300);
-
-        this.langZhBtn = this.add.text(x - 22, y, '繁中', {
-            fontSize: '13px',
-            fontStyle: currentLang === 'zh-TW' ? 'bold' : 'normal',
-            color: currentLang === 'zh-TW' ? '#ffd700' : '#888888'
-        }).setOrigin(0.5).setDepth(301).setName('langBtn_zh').setInteractive({ useHandCursor: true });
-
-        this.langDivider = this.add.text(x, y, '|', {
-            fontSize: '12px',
-            color: '#446688'
-        }).setOrigin(0.5).setDepth(301);
-
-        this.langEnBtn = this.add.text(x + 22, y, 'EN', {
-            fontSize: '13px',
-            fontStyle: currentLang === 'en' ? 'bold' : 'normal',
-            color: currentLang === 'en' ? '#ffd700' : '#888888'
-        }).setOrigin(0.5).setDepth(301).setName('langBtn_en').setInteractive({ useHandCursor: true });
-
-        this.langZhBtn.on('pointerdown', () => {
-            if (getLanguage() !== 'zh-TW') {
-                setLanguage('zh-TW');
-                this.scene.restart();
-            }
-        });
-
-        this.langEnBtn.on('pointerdown', () => {
-            if (getLanguage() !== 'en') {
-                setLanguage('en');
-                this.scene.restart();
-            }
-        });
-    }
-
-    createLevelCards(cx: number, cy: number) {
-        this.levelCards.forEach(c => c.destroy());
+    private render() {
+        this.children.removeAll(true);
         this.levelCards = [];
-
-        const highestUnlocked = ProgressionManager.getHighestUnlockedLevel();
-        const w = this.scale.width;
-        const h = this.scale.height;
-        
-        const isPortrait = h > w;
-        
-        let cols = isPortrait ? 2 : 4;
-        if (w < 400 && isPortrait) cols = 1; // Super narrow like iphone SE portrait
-        
-        const levelList = Object.values(LEVELS).sort((a, b) => a.id - b.id);
-        const rows = Math.ceil(levelList.length / cols);
-        
-        // Calculate max allowed sizes
-        const maxWidthPerCard = (w - (cols + 1) * 20) / cols;
-        const maxHeightPerCard = (h - 220) / rows; // leave room for title, customize, and tutorial
-        
-        let scale = Math.min(1.0, maxWidthPerCard / 180, maxHeightPerCard / 220);
-        
-        const cardWidth = 180 * scale;
-        const cardHeight = 220 * scale;
-        const padX = 20 * scale;
-        const padY = 30 * scale;
-        
-        const totalW = cols * cardWidth + (cols - 1) * padX;
-        const totalH = rows * cardHeight + (rows - 1) * padY;
-        
-        const startX = cx - totalW / 2 + cardWidth / 2;
-        const startY = Math.max(160, cy - totalH / 2 + cardHeight / 2 + 20); // Push down from header
-        
-        if (this.tutorialText) {
-            this.tutorialText.setPosition(cx, h - 30);
-        }
-
-        levelList.forEach((levelDef, idx) => {
-            const levelId = levelDef.id;
-            const c = idx % cols;
-            const r = Math.floor(idx / cols);
-            
-            const xPos = startX + c * (cardWidth + padX);
-            const yPos = startY + r * (cardHeight + padY);
-            
-            const card = this.createCard(xPos, yPos, levelId, highestUnlocked >= levelId, scale);
-            this.levelCards.push(card);
+        sceneBackdrop(this);
+        const w = this.scale.width, h = this.scale.height, cx = w / 2, safe = safeInsets(this), short = h < 500;
+        const languageY = safe.top + 32;
+        arcadeButton(this, w - safe.right - 111, languageY, 74, t('langZh'), () => { if (getLanguage() !== 'zh-TW') { setLanguage('zh-TW'); this.render(); } }, 'langBtn_zh', getLanguage() === 'zh-TW');
+        arcadeButton(this, w - safe.right - 35, languageY, 62, t('langEn'), () => { if (getLanguage() !== 'en') { setLanguage('en'); this.render(); } }, 'langBtn_en', getLanguage() === 'en');
+        uiText(this, cx, safe.top + (short ? 34 : 88), t('menuTitle'), getLanguage() === 'en' ? (w < 600 ? 24 : 32) : 34, '#b9fff0');
+        if (!short) uiText(this, cx, safe.top + 130, t('levelSelect'), 18, ARCADE.muted);
+        arcadeButton(this, cx, safe.top + (short ? 100 : 180), 210, t('customize'), () => this.scene.start('CustomizeScene'), 'customizeBtn', false);
+        this.createLevelCards(cx, h / 2);
+        this.tutorialText = uiText(this, cx, h - safe.bottom - 28, t('tutorialText'), 16, ARCADE.muted);
+        this.tutorialText.setWordWrapWidth(w - safe.left - safe.right - 36);
+        try { localStorage.setItem('tutorialSeen', 'true'); } catch { /* Tutorial remains usable without storage. */ }
+    }
+    createLevelCards(cx: number, _cy: number) {
+        this.levelCards.forEach(card => card.destroy());
+        this.levelCards = [];
+        const w = this.scale.width, h = this.scale.height, portrait = h > w, short = h < 500, safe = safeInsets(this);
+        const cols = portrait ? 2 : 4, rows = Math.ceil(4 / cols), gap = 14;
+        const cardW = Math.min(portrait ? 190 : 230, (w - safe.left - safe.right - 32 - gap * (cols - 1)) / cols);
+        const top = safe.top + (short ? 140 : 228), bottom = h - safe.bottom - 66;
+        const cardH = Math.min(portrait ? 210 : 230, (bottom - top - gap * (rows - 1)) / rows);
+        const totalW = cols * cardW + (cols - 1) * gap;
+        const highest = ProgressionManager.getHighestUnlockedLevel();
+        Object.values(LEVELS).forEach((level, index) => {
+            const x = cx - totalW / 2 + cardW / 2 + (index % cols) * (cardW + gap);
+            const y = top + cardH / 2 + Math.floor(index / cols) * (cardH + gap);
+            this.levelCards.push(this.createCard(x, y, level.id, highest >= level.id, cardW, cardH));
         });
     }
-
-    createCard(x: number, y: number, levelId: number, unlocked: boolean, scale: number = 1.0) {
-        const container = this.add.container(x, y);
-        container.setScale(scale);
-        const levelDef = LEVELS[levelId];
-        
-        const bg = this.add.rectangle(0, 0, 180, 220, unlocked ? 0x0055aa : 0x333333, 1)
-            .setStrokeStyle(4, unlocked ? 0x00ffff : 0x555555);
-
-        // Translated level title
-        const levelTitleStr = t(`level_${levelId}`);
-        const title = this.add.text(0, -60, levelTitleStr, {
-            fontSize: '28px',
-            fontStyle: 'bold',
-            color: unlocked ? '#ffffff' : '#aaaaaa'
-        }).setOrigin(0.5);
-
-        const bossTextStr = t('bossLabel', { value: levelDef.bossValue });
-        const bossText = this.add.text(0, -10, bossTextStr, {
-            fontSize: '20px',
-            color: unlocked ? '#ff5555' : '#777777'
-        }).setOrigin(0.5);
-
-        container.add([bg, title, bossText]);
-
+    createCard(x: number, y: number, levelId: number, unlocked: boolean, width = 180, height = 220) {
+        const container = this.add.container(x, y), level = LEVELS[levelId];
+        const accent = [0x81efdc, 0xf5a4bc, 0xffb978, 0xbcb6ff][levelId - 1];
+        const panel = roundedPanel(this, 0, 0, width, height, unlocked ? ARCADE.panel : 0x101c29, unlocked ? accent : ARCADE.border);
+        const themeKey = ['themeNeon', 'themeCity', 'themeLava', 'themeSpace'][levelId - 1];
+        const title = uiText(this, 0, -height / 2 + 28, t(`level_${levelId}`), 21, unlocked ? ARCADE.text : ARCADE.muted);
+        const theme = uiText(this, 0, -height / 2 + 55, t(themeKey), 16, ARCADE.muted);
+        const boss = uiText(this, 0, -height / 2 + 80, t('bossLabel', { value: level.bossValue }), 18, '#ffbdc8');
+        container.add([panel, title, theme, boss]);
         if (unlocked) {
-            const bestScore = ProgressionManager.getBestScore(levelId);
-            const scoreText = this.add.text(0, 30, `${t('bestLabel')}${bestScore}`, {
-                fontSize: '16px',
-                color: '#aaaaaa'
-            }).setOrigin(0.5);
-            
-            const btnBg = this.add.rectangle(0, 80, 120, 40, 0x00aa00, 1).setInteractive({ useHandCursor: true });
-            btnBg.setName(`startBtn_${levelId}`);
-            const btnText = this.add.text(0, 80, t('start'), { fontSize: '20px', fontStyle: 'bold', color: '#fff' }).setOrigin(0.5);
-            
-            btnBg.on('pointerdown', () => {
-                this.openPrep(levelId);
-            });
-            
-            container.add([scoreText, btnBg, btnText]);
-        } else {
-            const lockText = this.add.text(0, 50, t('locked'), {
-                fontSize: '24px',
-                color: '#aaaaaa'
-            }).setOrigin(0.5);
-            container.add(lockText);
-        }
-
+            const score = uiText(this, 0, height / 2 - 76, `${t('bestLabel')}${ProgressionManager.getBestScore(levelId)}`, 16, ARCADE.muted);
+            const button = arcadeButton(this, 0, height / 2 - 35, width - 24, t('start'), () => this.openPrep(levelId), `startBtn_${levelId}`);
+            container.add([score, button.art, button.bg, button.label]);
+        } else container.add(uiText(this, 0, height / 2 - 40, t('locked'), 18, ARCADE.muted));
         return container;
     }
-
     openPrep(levelId: number) {
-        if ((this.sound as any).context && (this.sound as any).context.state === 'suspended') {
-            (this.sound as any).context.resume();
-        }
+        this.resumeAudio();
         this.scene.start('PrepScene', { levelId });
     }
-
-    startGame(levelId: number) {
-        if ((this.sound as any).context && (this.sound as any).context.state === 'suspended') {
-            (this.sound as any).context.resume();
-        }
-        this.scene.start('GameScene', { levelId });
+    startGame(levelId: number) { this.resumeAudio(); this.scene.start('GameScene', { levelId }); }
+    private resumeAudio() {
+        const context = (this.sound as any).context;
+        if (context?.state === 'suspended') context.resume();
     }
-
-    resize(gameSize: Phaser.Structs.Size) {
-        const cx = gameSize.width / 2;
-        const cy = gameSize.height / 2;
-        const w = gameSize.width;
-        
-        const toggleX = w - 60;
-        const toggleY = 24;
-        if (this.langBg) this.langBg.setPosition(toggleX, toggleY);
-        if (this.langZhBtn) this.langZhBtn.setPosition(toggleX - 22, toggleY);
-        if (this.langDivider) this.langDivider.setPosition(toggleX, toggleY);
-        if (this.langEnBtn) this.langEnBtn.setPosition(toggleX + 22, toggleY);
-        if (this.titleText) this.titleText.setPosition(cx, 45);
-        if (this.levelSelectText) this.levelSelectText.setPosition(cx, 88);
-        if (this.customizeBtnBg) {
-            this.customizeBtnBg.setPosition(cx, 126);
-            this.customizeBtnText.setPosition(cx, 126);
-        }
-        this.createLevelCards(cx, cy);
-        if (this.tutorialText) this.tutorialText.setPosition(cx, gameSize.height - 30);
-    }
+    resize(_gameSize: Phaser.Structs.Size) { this.render(); }
 }

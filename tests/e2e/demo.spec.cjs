@@ -1,0 +1,11 @@
+const {test,expect}=require('playwright/test');
+const fs=require('node:fs');
+const {boot,startGame,fixtureEnemy,sceneState}=require('./helpers.cjs');
+test('actual gameplay recording: recoil and magnet chain collection',async({browser},info)=>{
+ const dir=process.env.EVIDENCE_DIR||info.outputDir;fs.mkdirSync(dir,{recursive:true});const ctx=await browser.newContext({viewport:{width:1366,height:768},recordVideo:{dir:dir+'/demo',size:{width:1366,height:768}}});const page=await ctx.newPage();
+ try{await boot(page);await startGame(page,{value:100});await page.evaluate(()=>{const s=window.__PHASER_GAME__.scene.getScene('GameScene');s.player.teleport(0,-80);s.player.currentAngle=Math.PI/2;s.player.targetAngle=Math.PI/2;s.player.seedPathForTest([{x:0,y:-80},{x:0,y:-360}])});await fixtureEnemy(page,{value:150,x:220,y:0,points:[{x:220,y:0},{x:-120,y:0}]});
+  await page.keyboard.down('ArrowDown');await page.waitForTimeout(1600);await page.keyboard.up('ArrowDown');expect(await page.evaluate(()=>window.__NUMBER_SNAKE_DEBUG__.getBodyRecoilCount())).toBeGreaterThan(0);await page.keyboard.down('ArrowRight');await page.waitForTimeout(1500);await page.keyboard.up('ArrowRight');await page.waitForTimeout(1800);
+  await startGame(page,{value:500});await page.evaluate(()=>{const p=window.__PHASER_GAME__.scene.getScene('GameScene').player;p.teleport(-180,0);p.currentAngle=0;p.targetAngle=0;p.seedPathForTest([{x:-180,y:0},{x:-750,y:0}])});await fixtureEnemy(page,{value:100,x:20,y:0,points:[{x:20,y:0},{x:20,y:280}]});await page.keyboard.down('ArrowRight');await expect.poll(async()=>(await sceneState(page)).enemies).toBe(0);await page.keyboard.up('ArrowRight');await page.keyboard.down('ArrowDown');await page.keyboard.press('m');await page.waitForTimeout(1100);await page.keyboard.up('ArrowDown');await page.keyboard.down('ArrowLeft');await page.waitForTimeout(900);await page.keyboard.up('ArrowLeft');await page.waitForTimeout(1400);expect(await page.evaluate(()=>window.__NUMBER_SNAKE_DEBUG__.getOrbRewardTotals().score)).toBeGreaterThan(0);
+  await page.screenshot({path:dir+'/actual-desktop-game.png'});await page.waitForTimeout(11000);
+ }finally{await ctx.close();const video=await page.video().path();fs.copyFileSync(video,dir+'/recoil-magnet-demo.webm');await info.attach('actual gameplay',{path:dir+'/recoil-magnet-demo.webm',contentType:'video/webm'})}
+});

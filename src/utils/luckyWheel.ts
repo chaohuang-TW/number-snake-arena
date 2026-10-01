@@ -75,7 +75,7 @@ export function applyWheelReward(
     reward: WheelReward,
     magnetAbility?: { resetCooldown?: () => void; cooldownTimer?: number; isActive?: boolean }
 ): void {
-    // 1. Numeric value only (does NOT increase body segments)
+    // All value writes enter the player value setter and shared length update.
     player.value += reward.valueBonus;
 
     // 2. Full HP if applicable

@@ -20,9 +20,11 @@ export function calculateDamage(playerValue: number, enemyValue: number): { hpLo
     return { hpLoss: 0, instantKO: false };
 }
 
-export function calculateNewBodySegments(currentSegments: number, hpLoss: number): number {
-    const newSegments = currentSegments - (hpLoss * GameBalance.player.segmentLossPerHP);
-    return Math.max(newSegments, GameBalance.player.minSegments);
+export function calculateNewBodySegments(currentSegments: number, _hpLoss: number): number {
+    // v0.7: HP damage does not change Value or permanently trim its body.
+    return Number.isFinite(currentSegments) && currentSegments > 0
+        ? currentSegments
+        : GameBalance.player.initialSegments;
 }
 
 export function calculateTurnRate(segments: number): number {
@@ -52,11 +54,12 @@ export function isMagnetEligible(playerValue: number, targetValue: number, isBos
 export function calculateOrbRewards(
     currentScore: number,
     currentBoost: number,
-    maxBoost: number = GameBalance.player.maxBoostEnergy
+    maxBoost: number = GameBalance.player.maxBoostEnergy,
+    reward: { score: number; energy: number; value: number } = { score: 0, energy: 0, value: 0 }
 ): { newScore: number; newBoost: number; valueGain: number } {
     return {
-        newScore: currentScore + GameBalance.orb.scoreReward,
-        newBoost: Math.min(maxBoost, currentBoost + GameBalance.orb.boostReward),
+        newScore: currentScore + (Number.isFinite(reward.score) ? Math.max(0, reward.score) : 0),
+        newBoost: Math.min(maxBoost, currentBoost + (Number.isFinite(reward.energy) ? Math.max(0, reward.energy) : 0)),
         valueGain: 0
     };
 }

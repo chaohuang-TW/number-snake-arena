@@ -4,6 +4,8 @@ import { isMagnetEligible } from '../utils/gameRules';
 import { NumberEnemy } from '../entities/NumberEnemy';
 import { CollectibleOrb } from '../entities/CollectibleOrb';
 import { t } from '../i18n';
+import { MagnetContactGuard } from './MagnetContactGuard';
+import { VisualPreferencesManager } from '../models/VisualPreferences';
 
 export type MagnetState = 'READY' | 'ACTIVE' | 'COOLDOWN';
 
@@ -15,6 +17,7 @@ export class MagnetAbility {
     private auraGraphics: Phaser.GameObjects.Graphics;
     private auraParticles: { angle: number, dist: number, speed: number }[] = [];
     private rotationAngle: number = 0;
+    private recoilGuard = new MagnetContactGuard();
 
     constructor(scene: Phaser.Scene) {
         this.scene = scene;
@@ -65,11 +68,13 @@ export class MagnetAbility {
         this.auraGraphics.setPosition(px, py);
 
         const radius = GameBalance.magnet.radius;
+        const preference = VisualPreferencesManager.get();
         this.rotationAngle += 0.003 * dt;
 
         // Outer electric ring
-        this.auraGraphics.lineStyle(2, 0x00ffff, 0.5 + 0.2 * Math.sin(this.rotationAngle * 3));
+        this.auraGraphics.lineStyle(2, 0x81efdc, preference.reducedMotion ? 0.6 : 0.5 + 0.2 * Math.sin(this.rotationAngle * 3));
         this.auraGraphics.strokeCircle(0, 0, radius);
+        if (preference.lowEffects || preference.reducedMotion) return;
 
         // Inner secondary pulse ring
         const innerPulse = radius * (0.6 + 0.3 * (1 - (this.timer % 1500) / 1500));
@@ -103,6 +108,7 @@ export class MagnetAbility {
         // Pull edible enemies
         for (const e of enemies) {
             if (!e.body || !e.body.active) continue;
+            if (e.isRecoiling || this.isEnemySuppressed(e.arenaId)) continue;
             if (!isMagnetEligible(playerValue, e.value, false)) continue;
 
             const dist = Phaser.Math.Distance.Between(px, py, e.body.x, e.body.y);
@@ -118,8 +124,9 @@ export class MagnetAbility {
 
         // Pull loose orbs
         for (const orb of orbs) {
-            if (orb.isCollected || !orb.sprite.active) continue;
-            const dist = Phaser.Math.Distance.Between(px, py, orb.sprite.x, orb.sprite.y);
+            if (!orb.canCollect) continue;
+            const position = orb.getCollectionPosition();
+            const dist = Phaser.Math.Distance.Between(px, py, position.x, position.y);
             if (dist <= radius) {
                 orb.pullTowards(px, py, orbPullSpeed, dt);
             }
@@ -129,6 +136,17 @@ export class MagnetAbility {
     getRemainingSeconds(): number {
         return Math.max(0, this.timer / 1000);
     }
+
+    suppressEnemyForRecoil(enemyId: string, until: number) {
+        this.recoilGuard.suppress(enemyId, until);
+    }
+
+    isEnemySuppressed(enemyId: string): boolean {
+        return this.recoilGuard.isSuppressed(enemyId, this.scene.time.now);
+    }
+
+    forgetEnemy(enemyId: string) { this.recoilGuard.forget(enemyId); }
+    clearContactSuppression() { this.recoilGuard.clear(); }
 
     getHUDText(): string {
         if (this.state === 'READY') {
@@ -149,9 +167,11 @@ export class MagnetAbility {
         this.timer = 0;
         this.auraGraphics.setVisible(false);
         this.auraGraphics.clear();
+        this.recoilGuard.clear();
     }
 
     destroy() {
+        this.recoilGuard.clear();
         this.auraGraphics.destroy();
     }
 }

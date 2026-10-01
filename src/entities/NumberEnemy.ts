@@ -50,7 +50,7 @@ export class NumberEnemy {
         const textureKey = scene.textures.exists(skinDef.enemyTexture) ? skinDef.enemyTexture : 'enemy_edible';
         this.body = scene.physics.add.image(x, y, textureKey);
         const radius = 18;
-        this.body.setCircle(radius, this.body.width / 2 - radius, this.body.height / 2 - radius).setDepth(50);
+        this.body.setCircle(radius, this.body.width / 2 - radius, this.body.height / 2 - radius).setCollideWorldBounds(true).setDepth(50);
         this.valueText = scene.add.text(x, y - 42, this.value.toString(), {
             fontFamily: 'system-ui, -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif',
             fontSize: '22px', fontStyle: 'bold', color: '#ffffff', stroke: '#10263d', strokeThickness: 4
@@ -130,18 +130,17 @@ export class NumberEnemy {
             this.recoilRemainingMs = Math.max(0, this.recoilRemainingMs - elapsed);
         } else this.body.setVelocity(vx, vy);
 
+        // Arcade owns the position clamp with the centered 18px hit circle.
+        // Changing only the sprite here offsets it from the already-stepped
+        // physics body when Arcade applies its movement in postUpdate.
         if (this.body.x < -hw + edgeMargin) {
-            this.body.setX(-hw + edgeMargin);
             if (this.body.body!.velocity.x < 0) this.body.setVelocityX(-this.body.body!.velocity.x);
         } else if (this.body.x > hw - edgeMargin) {
-            this.body.setX(hw - edgeMargin);
             if (this.body.body!.velocity.x > 0) this.body.setVelocityX(-this.body.body!.velocity.x);
         }
         if (this.body.y < -hh + edgeMargin) {
-            this.body.setY(-hh + edgeMargin);
             if (this.body.body!.velocity.y < 0) this.body.setVelocityY(-this.body.body!.velocity.y);
         } else if (this.body.y > hh - edgeMargin) {
-            this.body.setY(hh - edgeMargin);
             if (this.body.body!.velocity.y > 0) this.body.setVelocityY(-this.body.body!.velocity.y);
         }
 

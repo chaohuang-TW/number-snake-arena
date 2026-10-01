@@ -30,6 +30,7 @@ function fakeScene() {
             setAlpha: (alpha: number) => { object.alpha = alpha; return object; },
             setTexture: (key: string) => { object.texture.key = key; return object; },
             setCircle: (radius: number, offsetX: number, offsetY: number) => { object.collider = { radius, offsetX, offsetY }; return object; },
+            setCollideWorldBounds: (enabled: boolean) => { object.body.collideWorldBounds = enabled; return object; },
             setText: (text: string) => { object.text = text; return object; },
             setRotation: (rotation: number) => { object.rotation = rotation; return object; },
             setScale: (scaleX: number, scaleY = scaleX) => { object.scaleX = scaleX; object.scaleY = scaleY; return object; },

@@ -90,7 +90,8 @@ export class PlayerSnake {
     private setHeadCollider(): void {
         // Accessories may extend outside the circle; all skins share the same radius.
         const radius = 20;
-        this.head.setCircle(radius, this.head.width / 2 - radius, this.head.height / 2 - radius);
+        // Arcade integrates after Scene.update; sprite clamping alone is overwritten.
+        this.head.setCircle(radius, this.head.width / 2 - radius, this.head.height / 2 - radius).setCollideWorldBounds(true);
     }
 
     setDesiredDirection(dx: number, dy: number): void {

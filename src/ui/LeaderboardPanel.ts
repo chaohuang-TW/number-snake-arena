@@ -103,17 +103,17 @@ export class LeaderboardPanel {
 
                 // Colors
                 if (isFirst) {
-                    rText.setColor('#ffd700');
-                    nText.setColor('#ffd700');
-                    vText.setColor('#ffd700');
+                    this.setTextColor(rText, '#ffd700');
+                    this.setTextColor(nText, '#ffd700');
+                    this.setTextColor(vText, '#ffd700');
                 } else if (isPlayer) {
-                    rText.setColor('#00ffff');
-                    nText.setColor('#00ffff');
-                    vText.setColor('#00ffff');
+                    this.setTextColor(rText, '#00ffff');
+                    this.setTextColor(nText, '#00ffff');
+                    this.setTextColor(vText, '#00ffff');
                 } else {
-                    rText.setColor('#aaaaaa');
-                    nText.setColor('#ffffff');
-                    vText.setColor('#ffffff');
+                    this.setTextColor(rText, '#aaaaaa');
+                    this.setTextColor(nText, '#ffffff');
+                    this.setTextColor(vText, '#ffffff');
                 }
             } else {
                 crown.setVisible(false);
@@ -134,6 +134,10 @@ export class LeaderboardPanel {
         }
 
         this.drawBackground();
+    }
+
+    private setTextColor(text: Phaser.GameObjects.Text, color: string) {
+        if (text.style.color !== color) text.setColor(color);
     }
 
     private drawBackground() {

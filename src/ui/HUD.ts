@@ -76,7 +76,9 @@ export class HUD {
         this.valueText.setText(`${t('playerValue')} ${this.value}`);
         this.scoreText.setText(`${t('score')}: ${this.score}`);
         this.bestScoreText.setText(`${t('best')}: ${this.bestScore}`);
-        this.magnetText.setText(magnetHUDText || t('magnetReady')).setColor(state === 'READY' ? '#b9fff0' : state === 'ACTIVE' ? '#ffe69c' : ARCADE.muted);
+        this.magnetText.setText(magnetHUDText || t('magnetReady'));
+        const magnetColor = state === 'READY' ? '#b9fff0' : state === 'ACTIVE' ? '#ffe69c' : ARCADE.muted;
+        if (this.magnetText.style.color !== magnetColor) this.magnetText.setColor(magnetColor);
         this.magnetButton.setFillStyle(state === 'COOLDOWN' ? 0x273744 : state === 'ACTIVE' ? 0x297780 : 0x1c4a69, 0.9);
         this.energyRatio = maxEnergy > 0 ? Phaser.Math.Clamp(energy / maxEnergy, 0, 1) : 0;
         this.drawEnergy();

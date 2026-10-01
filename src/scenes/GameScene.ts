@@ -525,7 +525,7 @@ export class GameScene extends Phaser.Scene {
             }
         }
 
-        if (this.debugUI) {
+        if (this.debugUI?.text.visible) {
             this.debugUI.update();
         }
 
@@ -648,6 +648,7 @@ export class GameScene extends Phaser.Scene {
         if (this.gameState !== 'RUNNING') return;
         this.player?.syncMotionTrail();
         for (const enemy of this.enemies) if (enemy.body.active) enemy.syncMotionTrail();
+        this.ultimateBoss?.syncVisualPosition();
     }
 
     updateArenaRanking() {

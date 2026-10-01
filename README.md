@@ -88,9 +88,11 @@ npm run test:e2e
 BASE_URL=http://127.0.0.1:3020/ npm run test:e2e
 EVIDENCE_DIR=./test-results npm run test:e2e
 npm run test:perf
+# 使用完整 Chromium 的硬體渲染路徑；仍須讀回實際 GPU 狀態
+PERF_HARDWARE_GPU=1 npm run test:perf
 ```
 
-`test:perf` 另外執行五分鐘滿載：38 隻長身 AI、玩家長身、160 個圈、磁力與首領同場。一般 E2E 不會自動把這個耗時案例當作已執行。測試設定為零重試，失敗保留 trace、截圖與影片；原始結果及效能 JSON 放在 evidence 目錄。瀏覽器模擬尺寸不是實體手機或 iPad 效能結果。
+`test:perf` 另外執行五分鐘滿載：38 隻長身 AI、玩家長身、160 個圈、磁力與首領同場。一般 E2E 不會自動把這個耗時案例當作已執行。所有測試為零重試；一般 E2E 失敗保留 trace、截圖與影片，效能量測關閉 trace／錄影以免干擾 frame time，仍保存失敗截圖、每30秒部分數據及最終效能 JSON。瀏覽器模擬尺寸不是實體手機或 iPad 效能結果；渲染器與是否硬體加速亦須隨量測記錄。
 
 PR 工作流程只有安裝、單元測試、建置、E2E 與證據上傳，沒有 Pages 寫入／部署權限。正式 Pages 部署仍限定授權的 `main` 流程；本次不得用 `test:prod` 的舊正式站結果冒充候選版驗證。
 

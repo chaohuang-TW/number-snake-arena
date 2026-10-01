@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { getInwardBoundarySteering, clampToSafeWorld, getSafeWorldBounds } from '../utils/boundary';
+import { getInwardBoundarySteering, getSafeWorldBounds } from '../utils/boundary';
 import { GameBalance } from '../config/gameBalance';
 import { t } from '../i18n';
 
@@ -61,10 +61,18 @@ export class UltimateBoss {
 
         // Arcade physics body
         this.body = scene.physics.add.image(x, y, 'boss');
-        this.body.setCircle(this.radius);
+        this.body.setCircle(this.radius, this.body.width / 2 - this.radius, this.body.height / 2 - this.radius);
         this.body.setVisible(false);
         this.body.setCollideWorldBounds(true);
-        (this.body.body as Phaser.Physics.Arcade.Body).onWorldBounds = true;
+        const arcadeBody = this.body.body as Phaser.Physics.Arcade.Body;
+        arcadeBody.onWorldBounds = true;
+        const bounds = getSafeWorldBounds(GameBalance.world.width, GameBalance.world.height, this.boundaryMargin);
+        // Arcade bounds constrain collider edges; expand the safe center bounds by radius.
+        arcadeBody.setBoundsRectangle(new Phaser.Geom.Rectangle(
+            bounds.minX - this.radius, bounds.minY - this.radius,
+            bounds.maxX - bounds.minX + this.radius * 2, bounds.maxY - bounds.minY + this.radius * 2
+        ));
+        arcadeBody.updateFromGameObject();
 
         this.drawCore(false);
         this.state = 'CHASE';
@@ -307,15 +315,12 @@ export class UltimateBoss {
 
         arcadeBody.setVelocity(targetVx, targetVy);
 
-        // 4. Hard Clamp Failsafe
-        const bounds = getSafeWorldBounds(ww, wh, this.boundaryMargin);
-        const clamped = clampToSafeWorld(currentX, currentY, bounds);
-        if (clamped.x !== currentX || clamped.y !== currentY) {
-            this.body.setPosition(clamped.x, clamped.y);
-        }
+        this.syncVisualPosition();
+    }
 
-        // 5. Sync visual container position
-        this.visualContainer.setPosition(this.body.x, this.body.y);
+    /** Arcade reconciles the Image after Scene.update; keep the drawn boss centered then. */
+    public syncVisualPosition() {
+        if (this.body?.active) this.visualContainer.setPosition(this.body.x, this.body.y);
     }
 
     public destroy() {

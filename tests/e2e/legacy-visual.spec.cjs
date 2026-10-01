@@ -88,6 +88,8 @@ test('LV1 AD,AM,BL,BY: all four drawn cards, locked labels and tutorial fit ten 
 });
 
 test('LV2 AN: all six free skins use one UI selection/equip/play and keep radius 20 with distinct drawn silhouettes', async ({ page }) => {
+    // Six complete UI flows and screenshots need a larger total budget on CI software rendering.
+    test.setTimeout(120000);
     await boot(page);
     const masks = [];
     for (let index = 0; index < skins.length; index++) {

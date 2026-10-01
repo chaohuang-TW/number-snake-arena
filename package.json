@@ -1,7 +1,7 @@
 {
   "name": "number-snake-arena",
   "private": true,
-  "version": "0.7.0-candidate",
+  "version": "0.7.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -18,7 +18,7 @@
   "devDependencies": {
     "playwright": "^1.62.1",
     "typescript": "~5.6.2",
-    "vite": "^5.4.11",
-    "vitest": "^2.1.8"
+    "vite": "6.4.3",
+    "vitest": "4.1.11"
   }
 }

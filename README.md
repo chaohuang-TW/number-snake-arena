@@ -1,12 +1,14 @@
 # Number Snake Arena
 
-目前開發版為 **v0.7.0 候選版**，等待畫面與手感確認。此分支不會自動合併 `main`、建立正式 tag 或覆蓋 GitHub Pages。既有正式站不代表本候選版。
+本專案版本為 **v0.7.0**，正式遊戲：[Number Snake Arena](https://chaohuang-tw.github.io/number-snake-arena/)。本版包含 Value 長身、雙向尾巴反彈、吃頭沿路徑化圈、六款頭型及視覺改善；玩法參數與既有進度格式保留。
+
+本次為技術發布：真實手機／iPad、家長／孩子手感與弱裝置效能尚無驗證紀錄，均為 **NOT RUN**。Mac Chromium、WebKit 與 viewport 驗證不能替代真機驗收。依賴安全修補與查核範圍見 [v0.7.0 安全紀錄](docs/v0.7.0-security.md)；實際發布結果與對應 SHA 以 PR／Release 的當次證據為準。
 
 數值 **Value** 決定蛇身長度；**Score** 是累計分數；**Level** 是關卡。吃掉比自己小的普通 AI 蛇頭可增加數值，碰到對方身體則會彈開。相等的蛇頭不可吃。
 
 ## 本機試玩
 
-依既有 lockfile 安裝，使用 Node.js 20 以上與 npm：
+依既有 lockfile 安裝，使用受支援的 Node.js 24 LTS 與 npm：
 
 ```bash
 npm ci
@@ -15,7 +17,7 @@ npm run dev -- --host 127.0.0.1 --port 3020 --strictPort
 
 在**執行上述指令的同一台電腦**開啟 <http://127.0.0.1:3020/>。這是本機網址，並非公開預覽網址。
 
-固定建置的候選版可用以下方式試玩：
+固定 production build 可用以下方式試玩：
 
 ```bash
 npm run build
@@ -34,7 +36,7 @@ npm run preview -- --host 127.0.0.1 --port 3022 --strictPort
 
 以下是目前程式設定，集中於 `src/config/gameBalance.ts`，不是孩子已確認的精確規則。
 
-| 項目 | 候選版設定 |
+| 項目 | v0.7.0 設定 |
 |---|---|
 | 長度曲線 | `L(V) = clamp(36 + 24 × sqrt(V), 60, 720)`，世界像素，頭部中心至尾端 |
 | 適用對象 | 玩家與普通 AI 使用同一曲線；Boss 維持既有設計 |
@@ -94,8 +96,8 @@ PERF_HARDWARE_GPU=1 npm run test:perf
 
 `test:perf` 另外執行五分鐘滿載：38 隻長身 AI、玩家長身、160 個圈、磁力與首領同場。一般 E2E 不會自動把這個耗時案例當作已執行。所有測試為零重試；一般 E2E 失敗保留 trace、截圖與影片，效能量測關閉 trace／錄影以免干擾 frame time，仍保存失敗截圖、每30秒部分數據及最終效能 JSON。瀏覽器模擬尺寸不是實體手機或 iPad 效能結果；渲染器與是否硬體加速亦須隨量測記錄。
 
-PR 工作流程只有安裝、單元測試、建置、E2E 與證據上傳，沒有 Pages 寫入／部署權限。正式 Pages 部署仍限定授權的 `main` 流程；本次不得用 `test:prod` 的舊正式站結果冒充候選版驗證。
+PR 工作流程只有安裝、單元測試、建置、E2E 與證據上傳，沒有 Pages 寫入／部署權限。正式 Pages 部署限定通過 CI 的 `main` 流程。PR head、PR synthetic merge 與正式合併 commit 分開記錄，`test:prod` 的 `EXPECT_BUILD_COMMIT` 必須對應真正部署的 main SHA，不能使用舊候選驗證冒充新版本。
 
-目前基線原始 E2E 已重跑，因 `ReferenceError: API is not defined` 以 exit 1 結束，**不能稱基線全部通過**。新版執行結果以該次候選版的 raw log、退出碼與 manifest 為準；本 README 不預填 CI、正式站、WebKit 或真機 PASS。
+目前基線原始 E2E 已重跑，因 `ReferenceError: API is not defined` 以 exit 1 結束，**不能稱基線全部通過**。v0.7.0 執行結果以當次 frozen SHA 的 raw log、退出碼與 manifest 為準；本 README 不預填 CI、正式站、WebKit 或真機 PASS。
 
 完整舊案例移轉與尚待補核項目見 [v0.7.0 測試移轉清單](docs/v0.7.0-test-migration.md)，原始工作範圍見 [接手規格](docs/v0.7.0-request.md)。

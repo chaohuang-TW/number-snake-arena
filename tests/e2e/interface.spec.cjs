@@ -1,10 +1,55 @@
 const {test,expect}=require('playwright/test');
 const fs=require('node:fs');
 const {boot,startGame,sceneState,clickButton,buttonPoint}=require('./helpers.cjs');
+const expectedBuildVersion=require('../../package.json').version;
 const viewports=[[390,844],[430,932],[844,390],[932,430],[768,1024],[1024,768],[834,1194],[1024,1366],[1366,768],[1920,1080]];
 const evidence=process.env.EVIDENCE_DIR;
 function overlaps(a,b){return a&&b&&a.width>0&&a.height>0&&b.width>0&&b.height>0&&Math.min(a.x+a.width,b.x+b.width)-Math.max(a.x,b.x)>2&&Math.min(a.y+a.height,b.y+b.height)-Math.max(a.y,b.y)>2}
 async function capture(page,name){if(evidence){fs.mkdirSync(evidence,{recursive:true});await page.screenshot({path:evidence+'/'+name+'.png'})}}
+async function canvasButtonPixels(page,clip){
+ const png=await page.screenshot({clip,scale:'css'});
+ return page.evaluate(async encoded=>{
+  const bytes=Uint8Array.from(atob(encoded),character=>character.charCodeAt(0));
+  const bitmap=await createImageBitmap(new Blob([bytes],{type:'image/png'}));
+  const readbackCanvas=document.createElement('canvas');readbackCanvas.width=bitmap.width;readbackCanvas.height=bitmap.height;
+  const context=readbackCanvas.getContext('2d');context.drawImage(bitmap,0,0);bitmap.close();
+  return{width:readbackCanvas.width,height:readbackCanvas.height,rgba:Array.from(context.getImageData(0,0,readbackCanvas.width,readbackCanvas.height).data)};
+ },png.toString('base64'));
+}
+function matchingPixels(a,b,tolerance=8){
+ if(!a||!b||a.width!==b.width||a.height!==b.height)return false;
+ let close=0;for(let i=0;i<a.rgba.length;i+=4){if([0,1,2,3].every(channel=>Math.abs(a.rgba[i+channel]-b.rgba[i+channel])<=tolerance))close++}
+ return close/(a.rgba.length/4)>=.995;
+}
+async function normalButtonReference(probe,scene,target){
+ let point,previous;
+ await expect.poll(async()=>{
+  point=await buttonPoint(probe,scene,target);
+  const stable=point&&previous&&Math.abs(point.x-previous.x)<.5&&Math.abs(point.y-previous.y)<.5;
+  previous=point;return !!stable;
+ },{intervals:[100],message:`${scene}.${target} reference is visible, interactive and stable`}).toBe(true);
+ const clip={x:Math.ceil(point.x-point.width/2)+8,y:Math.ceil(point.y-point.height/2)+8,width:Math.floor(point.width)-16,height:Math.floor(point.height)-16};
+ const pixels=await canvasButtonPixels(probe,clip);
+ // The reference is real rendered button/label content, not a blank canvas.
+ const colours=new Set();for(let i=0;i<pixels.rgba.length;i+=4)colours.add(pixels.rgba.slice(i,i+3).join(','));
+ expect(colours.size).toBeGreaterThan(8);
+ return{point,clip,pixels};
+}
+async function clickNormalCanvasButtonOnce(page,reference,label){
+ const canvas=page.locator('canvas');let previousBounds,previousPixels;
+ await expect.poll(async()=>{
+  if(!await canvas.isVisible())return false;
+  const bounds=await canvas.boundingBox();if(!bounds||bounds.width<=0||bounds.height<=0)return false;
+  const inside=reference.point.x>bounds.x&&reference.point.x<bounds.x+bounds.width&&reference.point.y>bounds.y&&reference.point.y<bounds.y+bounds.height;
+  const stable=previousBounds&&['x','y','width','height'].every(key=>Math.abs(bounds[key]-previousBounds[key])<.5);
+  const pixels=await canvasButtonPixels(page,reference.clip);
+  const ready=inside&&stable&&matchingPixels(pixels,reference.pixels)&&matchingPixels(pixels,previousPixels,1);
+  previousBounds=bounds;previousPixels=pixels;return !!ready;
+ },{intervals:[100],message:`Normal URL ${label} has stable canvas bounds and matching visible button pixels before its one native click`}).toBe(true);
+ // No normal-URL game object/input flag is exposed. Matching the verified
+ // reference proves visible layout; the resulting route verifies interaction.
+ await page.mouse.click(reference.point.x,reference.point.y);
+}
 for(const[w,h]of viewports)for(const language of(w<h&&w<500?['zh-TW','en']:['zh-TW'])){
  test(`AM,BB,BD,BK,BV: ${w}x${h} ${language} real UI bounds and touch capability`,async({browser})=>{
   const touch=w<1100,ctx=await browser.newContext({viewport:{width:w,height:h},hasTouch:touch,recordVideo:undefined});const page=await ctx.newPage();
@@ -71,9 +116,11 @@ test('BL,BM,BN,BX,BY: unconditional zh-TW default and native language reload',as
 });
 
 test('BC: normal URL has no debug mutations; real play routing remains accessible',async({page})=>{
- await boot(page,{normal:true});await page.waitForTimeout(250);const exposed=await page.evaluate(()=>({debug:typeof window.__NUMBER_SNAKE_DEBUG__,phaser:typeof window.__PHASER_GAME__,build:window.__NUMBER_SNAKE_BUILD__}));expect(exposed.debug).toBe('undefined');expect(exposed.phaser).toBe('undefined');expect(exposed.build.version).toBe('0.7.0-candidate');
+ await boot(page,{normal:true});const exposed=await page.evaluate(()=>({debug:typeof window.__NUMBER_SNAKE_DEBUG__,phaser:typeof window.__PHASER_GAME__,build:window.__NUMBER_SNAKE_BUILD__}));expect(exposed.debug).toBe('undefined');expect(exposed.phaser).toBe('undefined');expect(exposed.build.version).toBe(expectedBuildVersion);
  // Matching production canvas layout, no game object access is exposed on this URL.
- const probe=await page.context().newPage();await boot(probe);const menuPoint=await buttonPoint(probe,'MenuScene','startBtn_1');await clickButton(probe,'MenuScene','startBtn_1');const prepPoint=await buttonPoint(probe,'PrepScene','startLevelBtn');await probe.close();await page.mouse.click(menuPoint.x,menuPoint.y);await page.waitForTimeout(300);await page.mouse.click(prepPoint.x,prepPoint.y);await page.waitForTimeout(300);
+ const probe=await page.context().newPage();let menu,prep;
+ try{await boot(probe);menu=await normalButtonReference(probe,'MenuScene','startBtn_1');await clickButton(probe,'MenuScene','startBtn_1');prep=await normalButtonReference(probe,'PrepScene','startLevelBtn');}finally{await probe.close()}
+ await clickNormalCanvasButtonOnce(page,menu,'menu start');await clickNormalCanvasButtonOnce(page,prep,'start level');
  // Read-only security contract is installed only after gameplay begins.
  await expect.poll(()=>page.evaluate(()=>typeof window.__E2E_READONLY__)).toBe('object');const before=await page.evaluate(()=>window.__E2E_READONLY__.getPlayerValue());for(let i=0;i<5;i++)await page.keyboard.press('c');expect(await page.evaluate(()=>window.__E2E_READONLY__.getPlayerValue())).toBe(before);
 });

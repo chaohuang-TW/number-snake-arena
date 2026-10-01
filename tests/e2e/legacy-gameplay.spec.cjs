@@ -1,5 +1,6 @@
 const {test,expect}=require('playwright/test');
 const {boot,startGame,sceneState,fixtureEnemy,clickButton,realBossContact}=require('./helpers.cjs');
+const expectedBuildVersion=require('../../package.json').version;
 
 test('N,T,V,AG,AJ: four arenas reset run state and preserve real progress',async({page})=>{
  await boot(page,{save:{number_snake_progression:{version:1,highestUnlockedLevel:4,maxHPBonus:3,claimedRewards:['level-1-clear-heart','level-2-clear-heart','level-3-clear-heart'],bestScoreByLevel:{1:20,2:30}}}});
@@ -42,7 +43,8 @@ test('M: after twenty replays keyboard movement and boost remain functional',asy
 });
 
 test('BC: URL with no query exposes build only and no mutating game globals',async({page})=>{
- await page.goto('./');await page.locator('canvas').waitFor({state:'visible'});const globals=await page.evaluate(()=>({debug:typeof window.__NUMBER_SNAKE_DEBUG__,phaser:typeof window.__PHASER_GAME__,readonly:typeof window.__E2E_READONLY__,version:window.__NUMBER_SNAKE_BUILD__.version}));expect(globals).toEqual({debug:'undefined',phaser:'undefined',readonly:'undefined',version:'0.7.0-candidate'});
+ await page.goto('./');await page.locator('canvas').waitFor({state:'visible'});const build=await page.evaluate(()=>window.__NUMBER_SNAKE_BUILD__);expect(build.version).toBe(expectedBuildVersion);if(process.env.EXPECT_BUILD_COMMIT)expect(build.commit).toBe(process.env.EXPECT_BUILD_COMMIT);
+ const globals=await page.evaluate(()=>({debug:typeof window.__NUMBER_SNAKE_DEBUG__,phaser:typeof window.__PHASER_GAME__,readonly:typeof window.__E2E_READONLY__,version:window.__NUMBER_SNAKE_BUILD__.version}));expect(globals).toEqual({debug:'undefined',phaser:'undefined',readonly:'undefined',version:expectedBuildVersion});
 });
 
 test('BT: eating the live ultimate arena ecosystem grows below500 player and reverses boss pursuit',async({page})=>{

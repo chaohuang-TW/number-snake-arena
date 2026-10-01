@@ -1,11 +1,12 @@
 import Phaser from 'phaser';
 import { GameBalance } from '../config/gameBalance';
-import { calculateTurnRate, getTailScale } from '../utils/gameRules';
+import { calculateTurnRate } from '../utils/gameRules';
 import { lerpAngle } from '../utils/math';
 import { CosmeticsManager } from '../models/Cosmetics';
 import { HEAD_SKINS } from '../config/headSkins';
 import { DistanceSnakePath, calculateRenderSegments, normalizeSnakeValue, renderSegmentCount } from '../systems/SnakePath';
 import type { SnakePoint } from '../systems/SnakePath';
+import { getSnakeSectionAppearance } from '../utils/snakeAppearance';
 
 export class PlayerSnake {
     scene: Phaser.Scene;
@@ -152,10 +153,11 @@ export class PlayerSnake {
             const sample = samples[i];
             spr.setVisible(!!sample);
             if (!sample) continue;
-            const isTail = i === samples.length - 1;
-            const texture = isTail && this.scene.textures.exists('player_tail') ? 'player_tail' : 'player_body';
+            const appearance = getSnakeSectionAppearance('player', i, samples.length, sample.angle);
+            const texture = this.scene.textures.exists(appearance.texture) ? appearance.texture
+                : appearance.isTail && this.scene.textures.exists('player_tail') ? 'player_tail' : 'player_body';
             if (spr.texture.key !== texture) spr.setTexture(texture);
-            spr.setPosition(sample.x, sample.y).setRotation(sample.angle + (isTail ? Math.PI : 0)).setScale(1, getTailScale(i, samples.length));
+            spr.setPosition(sample.x, sample.y).setRotation(appearance.rotation).setScale(appearance.scale, appearance.scale);
         }
     }
 

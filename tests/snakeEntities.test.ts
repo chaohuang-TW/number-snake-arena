@@ -8,6 +8,7 @@ import { GameBalance } from '../src/config/gameBalance';
 import { HEAD_SKIN_LIST } from '../src/config/headSkins';
 import { calculateRenderSegments, calculateSnakeLength, measurePath } from '../src/systems/SnakePath';
 import { applyWheelReward, WHEEL_REWARDS } from '../src/utils/luckyWheel';
+import { getTailTextureKey } from '../src/utils/snakeAppearance';
 
 function fakeScene() {
     const timers: { callback: () => void; removed: boolean; remove: () => void }[] = [];
@@ -30,10 +31,11 @@ function fakeScene() {
             setTexture: (key: string) => { object.texture.key = key; return object; },
             setCircle: (radius: number, offsetX: number, offsetY: number) => { object.collider = { radius, offsetX, offsetY }; return object; },
             setText: (text: string) => { object.text = text; return object; },
+            setRotation: (rotation: number) => { object.rotation = rotation; return object; },
             setScale: (scaleX: number, scaleY = scaleX) => { object.scaleX = scaleX; object.scaleY = scaleY; return object; },
             destroy: () => { object.destroyed = true; }
         };
-        for (const method of ['setDepth', 'setDrag', 'setOrigin', 'setRotation', 'clear', 'fillStyle', 'fillCircle', 'lineStyle', 'strokeCircle', 'strokeRoundedRect', 'lineBetween']) object[method] = () => object;
+        for (const method of ['setDepth', 'setDrag', 'setOrigin', 'clear', 'fillStyle', 'fillCircle', 'lineStyle', 'strokeCircle', 'strokeRoundedRect', 'lineBetween']) object[method] = () => object;
         return object;
     }
     const scene: any = {
@@ -217,5 +219,53 @@ describe('Entity length and motion integration', () => {
             expect((enemy.body as any).collider).toEqual({ radius: 18, offsetX: 14, offsetY: 14 });
         }
         expect(GameBalance.player.maxBoostEnergy).toBe(100);
+    });
+
+    it.each(['player', 'enemy'] as const)('%s curved drawing stays unrotated with uniform taper and unchanged path/collider', kind => {
+        const { scene } = fakeScene();
+        const snake = kind === 'player' ? new PlayerSnake(scene, 0, 0, 100, 3, 'classic') : new NumberEnemy(scene, 0, 0, 100, 'classic');
+        const head = snake instanceof PlayerSnake ? snake.head : snake.body;
+        snake.path.seed([{ x: 0, y: 0 }, { x: -55, y: -20 }, { x: -100, y: -70 }, { x: -155, y: -40 }, { x: -210, y: -95 }, { x: -265, y: -20 }, { x: -320, y: -100 }]);
+        head.setVelocity(123, -76);
+        const path = snake.getVisiblePath();
+        const samples = snake.path.getVisibleSamples();
+        expect(samples.some(sample => Math.abs(sample.angle) > 0.2)).toBe(true);
+        snake.updateBodySprites();
+
+        const sprites = snake.bodySprites.filter(sprite => sprite.visible);
+        expect(sprites).toHaveLength(calculateRenderSegments(100));
+        expect(sprites.map(sprite => ({ x: sprite.x, y: sprite.y }))).toEqual(samples.map(sample => ({ x: sample.x, y: sample.y })));
+        expect(sprites.every(sprite => sprite.rotation === 0 && sprite.scaleX === sprite.scaleY)).toBe(true);
+        for (let i = 1; i < sprites.length; i++) {
+            expect(Math.hypot(sprites[i].x - sprites[i - 1].x, sprites[i].y - sprites[i - 1].y)).toBeLessThanOrEqual(18.000001);
+        }
+        expect(sprites.slice(-3).map(sprite => [sprite.scaleX, sprite.scaleY])).toEqual([[0.85, 0.85], [0.65, 0.65], [1, 1]]);
+        expect(sprites.slice(0, -1).every(sprite => sprite.texture.key === `${kind}_body`)).toBe(true);
+        expect(sprites.at(-1)!.texture.key).toBe(getTailTextureKey(kind, samples.at(-1)!.angle + Math.PI));
+        expect(sprites.at(-1)!.texture.key).toMatch(new RegExp(`^${kind}_tail_dir_(?:[0-9]|[12][0-9]|3[01])$`));
+        expect(snake.getVisiblePath()).toEqual(path);
+        expect(measurePath(path)).toBeCloseTo(276);
+        expect(snake.pathLength).toBeCloseTo(276);
+        expect(snake.targetLength).toBe(276);
+        expect(snake.value).toBe(100);
+        expect(head.body!.velocity).toEqual({ x: 123, y: -76 });
+        expect({ x: head.x, y: head.y }).toEqual({ x: 0, y: 0 });
+        expect((head as any).collider.radius).toBe(kind === 'player' ? 20 : 18);
+    });
+
+    it.each([
+        ['player', 'legacy'], ['player', 'body'], ['enemy', 'legacy'], ['enemy', 'body']
+    ] as const)('%s tip safely falls back to %s when baked direction textures are missing', (kind, fallback) => {
+        const { scene } = fakeScene();
+        scene.textures.exists = (key: string) => !key.startsWith(`${kind}_tail_dir_`) && (fallback === 'legacy' || key !== `${kind}_tail`);
+        const snake = kind === 'player' ? new PlayerSnake(scene, 0, 0, 10, 3, 'classic') : new NumberEnemy(scene, 0, 0, 10, 'classic');
+        snake.path.seed([{ x: 0, y: 0 }, { x: -150, y: 80 }]);
+        snake.updateBodySprites();
+        const tip = snake.bodySprites.filter(sprite => sprite.visible).at(-1)!;
+        expect(tip.texture.key).toBe(`${kind}_${fallback === 'legacy' ? 'tail' : 'body'}`);
+        expect(tip.rotation).toBe(0);
+        expect(tip.scaleX).toBe(1);
+        expect(tip.scaleY).toBe(1);
+        expect(Number.isFinite(tip.x) && Number.isFinite(tip.y)).toBe(true);
     });
 });

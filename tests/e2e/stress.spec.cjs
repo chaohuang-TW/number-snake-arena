@@ -81,16 +81,45 @@ test('C: swept high-speed body contact does not tunnel',async({page})=>{
 
 test('full load: 38 long AI + long player +160 circles + magnet + boss for five minutes',async({page},info)=>{
  test.skip(process.env.PERF_TEST!=='1','Explicit five-minute machine performance run');test.setTimeout(360000);
+ const runtimeErrors=[];
+ page.on('pageerror',error=>runtimeErrors.push({name:error.name,message:error.message,stack:error.stack}));
  await boot(page);await startGame(page,{level:4,value:499});
- await page.evaluate(()=>{const s=window.__PHASER_GAME__.scene.getScene('GameScene');s.player.isInvulnerable=true;s.player.seedPathForTest([{x:0,y:0},{x:-600,y:0}]);for(let i=0;i<38;i++){const x=-950+(i%10)*190,y=-570+Math.floor(i/10)*330,e=window.__NUMBER_SNAKE_DEBUG__.spawnEnemy(500,x,y);e.seedPathForTest([{x,y},{x:x>0?x-550:x+550,y}]);}window.__NUMBER_SNAKE_DEBUG__.spawnUltimateBossForTest();window.perfStart=performance.now();window.perfFrames=[];window.perfLast=performance.now();window.perfTick=()=>{const now=performance.now();window.perfFrames.push(now-window.perfLast);window.perfLast=now};s.events.on('postupdate',window.perfTick);});
+ await page.evaluate(()=>{const s=window.__PHASER_GAME__.scene.getScene('GameScene');s.player.isInvulnerable=true;s.player.seedPathForTest([{x:0,y:0},{x:-600,y:0}]);for(let i=0;i<38;i++){const x=-950+(i%10)*190,y=-570+Math.floor(i/10)*330,e=window.__NUMBER_SNAKE_DEBUG__.spawnEnemy(500,x,y);e.seedPathForTest([{x,y},{x:x>0?x-550:x+550,y}]);}window.__NUMBER_SNAKE_DEBUG__.spawnUltimateBossForTest();window.perfStart=performance.now();window.perfFrames=[];window.perfLast=performance.now();window.perfCandidateCheckMax=0;window.perfTick=()=>{const now=performance.now();window.perfFrames.push(now-window.perfLast);window.perfLast=now;window.perfCandidateCheckMax=Math.max(window.perfCandidateCheckMax,window.__NUMBER_SNAKE_DEBUG__.getBodyCandidateChecks())};s.events.on('postupdate',window.perfTick);});
  const samples=[];for(let i=0;i<300;i++){
   await page.evaluate(()=>{const s=window.__PHASER_GAME__.scene.getScene('GameScene');while(s.orbs.length<160)window.__NUMBER_SNAKE_DEBUG__.spawnOrbForTest(220+(s.orbs.length%10)*30,Math.floor(s.orbs.length/10)*25-250);if(s.magnet.state==='READY')s.magnet.activate();});
-  await page.waitForTimeout(1000);if(i%10===0)samples.push(await page.evaluate(()=>{const s=window.__PHASER_GAME__.scene.getScene('GameScene');return{elapsed:performance.now()-window.perfStart,enemies:s.enemies.length,orbs:s.orbs.length,pool:window.__NUMBER_SNAKE_DEBUG__.getOrbPoolSize(),children:s.children.length,checks:window.__NUMBER_SNAKE_DEBUG__.getBodyCandidateChecks(),fps:s.game.loop.actualFps,boss:!!s.ultimateBoss,state:s.gameState}}));
+  await page.waitForTimeout(1000);if(i%10===0)samples.push(await page.evaluate(()=>{
+   const s=window.__PHASER_GAME__.scene.getScene('GameScene');
+   const range=values=>({min:Math.min(...values),max:Math.max(...values)});
+   const p=s.player,enemyHeads=s.enemies.map(e=>({id:e.arenaId,x:e.body.x,y:e.body.y}));
+   const boss=s.ultimateBoss?{x:s.ultimateBoss.body.x,y:s.ultimateBoss.body.y}:null;
+   const outOfWorld=head=>!Number.isFinite(head.x)||!Number.isFinite(head.y)||Math.abs(head.x)>1200||Math.abs(head.y)>800;
+   return{
+    elapsed:performance.now()-window.perfStart,enemies:s.enemies.length,orbs:s.orbs.length,pool:window.__NUMBER_SNAKE_DEBUG__.getOrbPoolSize(),children:s.children.length,
+    checks:window.__NUMBER_SNAKE_DEBUG__.getBodyCandidateChecks(),candidateCheckMax:window.perfCandidateCheckMax,fps:s.game.loop.actualFps,boss:!!s.ultimateBoss,state:s.gameState,
+    player:{value:p.value,targetLength:p.targetLength,pathLength:p.pathLength,visibleBodySegments:p.bodySprites.filter(sprite=>sprite.visible&&sprite.active).length,x:p.head.x,y:p.head.y},
+    enemyValues:range(s.enemies.map(e=>e.value)),enemyTargetLengths:range(s.enemies.map(e=>e.targetLength)),enemyVisiblePathLengths:range(s.enemies.map(e=>e.pathLength)),enemyVisibleBodySegments:range(s.enemies.map(e=>e.bodySprites.filter(sprite=>sprite.visible&&sprite.active).length)),
+    bounds:{world:{halfWidth:1200,halfHeight:800},playerOutOfWorld:outOfWorld(p.head),enemyX:range(enemyHeads.map(e=>e.x)),enemyY:range(enemyHeads.map(e=>e.y)),enemyOutOfWorldIds:enemyHeads.filter(outOfWorld).map(e=>e.id),ultimateBoss:boss,ultimateBossOutOfWorld:boss?outOfWorld(boss):null}
+   };
+  }));
  }
  const frames=await page.evaluate(()=>{const s=window.__PHASER_GAME__.scene.getScene('GameScene');s.events.off('postupdate',window.perfTick);return window.perfFrames});frames.sort((a,b)=>a-b);
  const elapsedMs=await page.evaluate(()=>performance.now()-window.perfStart);
- const report={status:'MEASURED',machine:{platform:os.platform(),arch:os.arch(),cpus:os.cpus()[0]?.model,browser:await page.context().browser().version(),viewport:page.viewportSize(),headless:true,realMobile:false},elapsedMs,frameTimeMs:{p50:frames[Math.floor(frames.length*.5)],p95:frames[Math.floor(frames.length*.95)],max:frames.at(-1)},samples};
+ const maxCandidateChecks=await page.evaluate(()=>window.perfCandidateCheckMax);
+ const report={status:'MEASURED',machine:{platform:os.platform(),arch:os.arch(),cpus:os.cpus()[0]?.model,browser:await page.context().browser().version(),viewport:page.viewportSize(),headless:true,realMobile:false},elapsedMs,runtimeErrors,frameTimeMs:{p50:frames[Math.floor(frames.length*.5)],p95:frames[Math.floor(frames.length*.95)],max:frames.at(-1)},collisionWork:{maxCandidateChecks,measurement:'Maximum actual swept-capsule candidate checks from every postupdate frame; AI-to-AI pairs are excluded'},boundsSummary:{measurement:'Head centers sampled every 10 seconds; transient positions between samples are not covered',playerOutOfWorldSamples:samples.filter(s=>s.bounds.playerOutOfWorld).length,enemyOutOfWorldSamples:samples.filter(s=>s.bounds.enemyOutOfWorldIds.length>0).length,ultimateBossOutOfWorldSamples:samples.filter(s=>s.bounds.ultimateBossOutOfWorld).length,playerMaxAbsX:Math.max(...samples.map(s=>Math.abs(s.player.x))),playerMaxAbsY:Math.max(...samples.map(s=>Math.abs(s.player.y))),enemyMaxAbsX:Math.max(...samples.map(s=>Math.max(Math.abs(s.bounds.enemyX.min),Math.abs(s.bounds.enemyX.max)))),enemyMaxAbsY:Math.max(...samples.map(s=>Math.max(Math.abs(s.bounds.enemyY.min),Math.abs(s.bounds.enemyY.max))))},samples};
  const output=process.env.EVIDENCE_DIR||info.outputDir;fs.mkdirSync(output,{recursive:true});fs.writeFileSync(output+'/performance.json',JSON.stringify(report,null,2));await info.attach('performance',{body:JSON.stringify(report,null,2),contentType:'application/json'});
+ expect(runtimeErrors,'No uncaught browser exceptions during the full-load run').toEqual([]);
  expect(elapsedMs).toBeGreaterThanOrEqual(300000);expect(samples.every(s=>s.enemies===38&&s.boss&&s.state==='RUNNING'&&s.pool<=160)).toBe(true);expect(Math.max(...samples.map(s=>s.children))-Math.min(...samples.map(s=>s.children))).toBeLessThan(60);
+ for(const sample of samples){
+  expect(sample.player.value).toBe(499);
+  expect(sample.player.targetLength).toBeCloseTo(36+24*Math.sqrt(499),3);
+  expect(sample.player.pathLength).toBeGreaterThan(450);expect(sample.player.pathLength).toBeLessThanOrEqual(sample.player.targetLength+.01);
+  expect(sample.player.visibleBodySegments).toBeGreaterThanOrEqual(20);expect(sample.player.visibleBodySegments).toBeLessThanOrEqual(40);
+  expect(sample.enemyValues).toEqual({min:500,max:500});
+  expect(sample.enemyTargetLengths.min).toBeCloseTo(36+24*Math.sqrt(500),3);expect(sample.enemyTargetLengths.max).toBeCloseTo(36+24*Math.sqrt(500),3);
+  expect(sample.enemyVisiblePathLengths.min).toBeGreaterThan(450);expect(sample.enemyVisiblePathLengths.max).toBeLessThanOrEqual(sample.enemyTargetLengths.max+.01);
+  expect(sample.enemyVisibleBodySegments.min).toBeGreaterThanOrEqual(20);expect(sample.enemyVisibleBodySegments.max).toBeLessThanOrEqual(40);
+ }
+ expect(Number.isInteger(maxCandidateChecks)&&maxCandidateChecks>=0).toBe(true);
  await startGame(page,{freeze:true});expect((await sceneState(page)).enemies).toBe(0);expect((await sceneState(page)).orbs).toBe(0);
+ expect(runtimeErrors,'The cleanup and fresh scene also remain free of browser exceptions').toEqual([]);
 });

@@ -6,9 +6,10 @@ const baseURL=configured||'http://127.0.0.1:3020/';
 let server;
 async function ready(){const start=Date.now();while(Date.now()-start<20000){if(server&&server.exitCode!==null)throw new Error('Owned project server exited before readiness');try{const r=await fetch(baseURL);if(r.ok)return}catch{}await new Promise(r=>setTimeout(r,100))}throw new Error('Project server did not become ready: '+baseURL)}
 function startOwnedServer(){return new Promise((resolve,reject)=>{
+ let startupOutput='';
  server=cp.spawn(process.execPath,[path.join(root,'node_modules/vite/bin/vite.js'),'--host','127.0.0.1','--port','3020','--strictPort'],{cwd:root,stdio:['ignore','pipe','pipe']});
  const timer=setTimeout(()=>reject(new Error('Owned project server did not bind its port')),20000);
- server.stdout.on('data',data=>{process.stdout.write(data);if(data.toString().includes('Local:')){clearTimeout(timer);resolve()}});
+ server.stdout.on('data',data=>{process.stdout.write(data);startupOutput=(startupOutput+data.toString()).slice(-8192);const plain=startupOutput.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g,'');if(/Local:\s+http:\/\/127\.0\.0\.1:3020\//.test(plain)){clearTimeout(timer);resolve()}});
  server.stderr.on('data',data=>process.stderr.write(data));
  server.on('error',error=>{clearTimeout(timer);reject(error)});
  server.on('exit',code=>{clearTimeout(timer);reject(new Error('Owned project server exited: '+code))});

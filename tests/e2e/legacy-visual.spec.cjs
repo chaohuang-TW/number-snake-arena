@@ -332,3 +332,100 @@ test('LV6 CO3,G: real denied preference/cosmetic Storage reads and writes keep t
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem('number_snake_progression')))).toEqual(progression);
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem('number_snake_cosmetics_v1')).selectedHeadSkin)).toBe('mecha');
 });
+
+test('LV7: actual WebGL snapshot keeps curved player and six mixed-texture AI body cores filled', async ({ page }, info) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await boot(page); await startGame(page, { value: 50, freeze: true });
+    await page.evaluate(() => {
+        const scene = window.__PHASER_GAME__.scene.getScene('GameScene');
+        scene.bossSpawned = true;
+        scene.player.seedPathForTest([{ x: 0, y: 0 }, { x: 0, y: 80 }, { x: -30, y: 145 }, { x: 0, y: 210 }]);
+        scene.player.head.body.moves = false;
+        scene.physics.world.drawDebug = false; scene.physics.world.debugGraphic?.clear();
+    });
+    for (const [row, y] of [-105, 75, 245].entries()) for (const [side, x] of [-115, 115].entries()) {
+        const index = row * 2 + side, direction = row === 2 ? -1 : 1;
+        await fixtureEnemy(page, { value: [5, 10, 25, 40, 60, 80][index], x, y, skin: skins[index], points: [{ x, y }, { x: Math.sign(x) * 155, y: y + direction * 30 }, { x: Math.sign(x) * 153, y: y + direction * 72 }] });
+    }
+    await page.waitForTimeout(300);
+    const snapshot = await page.evaluate(() => new Promise((resolve, reject) => {
+        const game = window.__PHASER_GAME__, scene = game.scene.getScene('GameScene'), camera = scene.cameras.main;
+        // The snapshot is produced by Phaser's actual renderer. Only its returned
+        // image is drawn into a NEW readback canvas; the game canvas is never painted.
+        game.renderer.snapshot(image => {
+            try {
+                const readback = document.createElement('canvas');
+                readback.width = image.width; readback.height = image.height;
+                const context = readback.getContext('2d', { willReadFrequently: true });
+                context.drawImage(image, 0, 0);
+                const pixels = context.getImageData(0, 0, readback.width, readback.height).data;
+                const sx = readback.width / game.scale.width, sy = readback.height / game.scale.height;
+                const actors = [{ id: 'player', snake: scene.player, head: scene.player.head, radius: 20, key: 'player_body' }, ...scene.enemies.map(enemy => ({ id: enemy.arenaId, snake: enemy, head: enemy.body, radius: 18, key: 'enemy_body' }))];
+                const ui = Object.entries(scene.getLayoutBounds()).filter(([, rect]) => rect && rect.width > 0 && rect.height > 0).map(([name, rect]) => ({ name, ...rect }));
+                const sections = [], actorCounts = [];
+                for (const actor of actors) {
+                    const headSource = actor.head.texture.getSourceImage();
+                    const headAlpha = headSource.getContext('2d').getImageData(0, 0, headSource.width, headSource.height).data;
+                    const headTransform = actor.head.getWorldTransformMatrix();
+                    const visible = actor.snake.bodySprites.filter(sprite => sprite.visible && sprite.active);
+                    actorCounts.push({ id: actor.id, visibleSections: visible.length, nonTailSections: visible.filter(sprite => sprite.texture.key === actor.key).length });
+                    for (const [index, sprite] of visible.entries()) {
+                        if (sprite.texture.key !== actor.key) continue; // Tapered directional tail is not a circular body section.
+                        const point = camera.matrix.transformPoint(sprite.x, sprite.y), radius = 4;
+                        const cx = point.x * sx, cy = point.y * sy;
+                        let tested = 0, filled = 0, occludedByHead = 0, occludedByThreat = 0;
+                        const darkPixels = [];
+                        for (let py = Math.ceil(cy - radius * sy); py <= Math.floor(cy + radius * sy); py++) for (let px = Math.ceil(cx - radius * sx); px <= Math.floor(cx + radius * sx); px++) {
+                            const dx = (px + .5 - cx) / sx, dy = (py + .5 - cy) / sy;
+                            if (dx * dx + dy * dy > radius * radius) continue;
+                            // Only alpha from the actual head art masks legal occlusion.
+                            // Its drop shadow/accessories extend beyond the collider radius.
+                            // This asset alpha never contributes a passing body pixel.
+                            const world = camera.matrix.applyInverse((px + .5) / sx, (py + .5) / sy);
+                            // The high-threat diamond deliberately overlays the first
+                            // section. Its conservative glyph region is excluded from
+                            // body-colour coverage; later circular sections remain tested.
+                            if (index === 0 && actor.snake.currentThreatType === 3 && actor.snake.glow?.visible && Math.abs(world.x - actor.head.x) + Math.abs(world.y - actor.head.y) <= 34) { occludedByThreat++; continue; }
+                            const local = headTransform.applyInverse(world.x, world.y);
+                            const hx = Math.floor(local.x + actor.head.displayOriginX + actor.head.frame.cutX), hy = Math.floor(local.y + actor.head.displayOriginY + actor.head.frame.cutY);
+                            if (hx >= 0 && hy >= 0 && hx < headSource.width && hy < headSource.height && headAlpha[(hy * headSource.width + hx) * 4 + 3] > 5) { occludedByHead++; continue; }
+                            const offset = (py * readback.width + px) * 4;
+                            const [r, g, b, a] = pixels.slice(offset, offset + 4);
+                            // Body bases are teal (20,143,172) and gray (77,100,123).
+                            // The glossy sections also cast teal shadows on neighbours
+                            // (e.g. 24,66,84); these are body pixels. The missing shards'
+                            // arena colour (8,22,36) fails all three lower/hue bounds.
+                            const isBody = actor.id === 'player' ? r <= 140 && g >= 55 && b >= 75 && b - r >= 30 : r >= 55 && r <= 145 && g >= 75 && g <= 170 && b >= 95 && b <= 190 && b - r >= 20 && g - r >= 10;
+                            tested++;
+                            if (a >= 240 && isBody) filled++; else if (darkPixels.length < 8) darkPixels.push({ x: px, y: py, rgba: [r, g, b, a] });
+                        }
+                        sections.push({ actor: actor.id, index, key: sprite.texture.key, rotation: sprite.rotation, scaleY: sprite.scaleY, center: { x: point.x, y: point.y }, radius, tested, filled, occludedByHead, occludedByThreat, coverage: tested ? filled / tested : null, darkPixels, uiCover: ui.filter(rect => point.x + radius > rect.x && point.x - radius < rect.x + rect.width && point.y + radius > rect.y && point.y - radius < rect.y + rect.height).map(rect => rect.name) });
+                    }
+                }
+                resolve({ build: window.__NUMBER_SNAKE_BUILD__, rendererType: game.renderer.type, state: scene.gameState, playerValue: scene.player.value, enemyValues: scene.enemies.map(enemy => enemy.value), actorCounts, width: readback.width, height: readback.height, sections, image: readback.toDataURL('image/png') });
+            } catch (error) { reject(error); }
+        });
+    }));
+    const renderedImage = Buffer.from(snapshot.image.split(',')[1], 'base64');
+    delete snapshot.image;
+    if (evidence) {
+        fs.mkdirSync(evidence, { recursive: true });
+        fs.writeFileSync(`${evidence}/LV7-renderer-snapshot.png`, renderedImage);
+        fs.writeFileSync(`${evidence}/LV7-renderer-coverage.json`, JSON.stringify(snapshot, null, 2));
+    }
+    await info.attach('actual-renderer-snapshot', { body: renderedImage, contentType: 'image/png' });
+    await info.attach('body-core-coverage', { body: JSON.stringify(snapshot, null, 2), contentType: 'application/json' });
+    await capture(page, 'LV7-actual-curved-game');
+    expect(snapshot.rendererType, 'The regression exercises the WebGL renderer').toBe(2);
+    expect(snapshot.state).toBe('RUNNING'); expect(snapshot.playerValue).toBe(50);
+    expect(snapshot.enemyValues).toEqual([5, 10, 25, 40, 60, 80]);
+    expect(snapshot.actorCounts).toHaveLength(7);
+    expect(snapshot.actorCounts[0]).toEqual({ id: 'player', visibleSections: 12, nonTailSections: 11 });
+    for (const actor of snapshot.actorCounts) expect(actor.nonTailSections).toBeGreaterThanOrEqual(4);
+    for (const section of snapshot.sections) {
+        expect(section.uiCover, `${section.actor} section ${section.index} is not obscured by UI`).toEqual([]);
+        if (section.index > 0) expect(section.tested, `${section.actor} section ${section.index} has actual unoccluded core pixels`).toBeGreaterThan(20);
+        if (section.tested > 0) expect.soft(section.coverage, `${section.actor} section ${section.index}: real rendered radius-4 disk is at least 90% body colour`).toBeGreaterThanOrEqual(.9);
+        else expect(section.occludedByHead + section.occludedByThreat, `${section.actor} first core is covered by real head or threat art`).toBeGreaterThan(0);
+    }
+});

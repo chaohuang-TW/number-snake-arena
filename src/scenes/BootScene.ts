@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { HEAD_SKIN_LIST, HEAD_TEXTURE_SIZE } from '../config/headSkins';
 import { VisualPreferencesManager } from '../models/VisualPreferences';
+import { TAIL_RENDER_DIRECTIONS, getTailTextureKey } from '../utils/snakeAppearance';
 
 export class BootScene extends Phaser.Scene {
     constructor() {
@@ -34,7 +35,7 @@ export class BootScene extends Phaser.Scene {
         // Overlapping glossy sections make a continuous ribbon, without bloom emitters.
         for (const [key, size, color, edge] of [
             ['player_body', 30, 0x148fac, 0x88f4ed],
-            ['enemy_body', 24, 0x4d647b, 0xa7c3d1]
+            ['enemy_body', 30, 0x4d647b, 0xa7c3d1]
         ] as const) {
             graphics.clear();
             const r = size / 2;
@@ -55,6 +56,7 @@ export class BootScene extends Phaser.Scene {
             graphics.fillCircle(size - 8, size / 2, size / 3);
             graphics.generateTexture(key, size, size);
         }
+        this.generateDirectionalTailTextures(graphics);
 
         // Collectible Body Orb
         graphics.clear();
@@ -140,6 +142,39 @@ export class BootScene extends Phaser.Scene {
         graphics.generateTexture('crown_gold', 32, 24);
 
         graphics.destroy();
+    }
+
+    private generateDirectionalTailTextures(graphics: Phaser.GameObjects.Graphics) {
+        // Bake orientation into padded textures: runtime rotation clips mixed-texture
+        // quads in the current WebGL renderer. Legacy tails remain for menu previews.
+        for (const [kind, size, color] of [['player', 30, 0x148fac], ['enemy', 24, 0x4d647b]] as const) {
+            const halfWidth = (size / 2 - 3) * 0.5;
+            const triangle = [
+                { x: -size / 2 + 1, y: 0 },
+                { x: size / 2 - 4, y: -halfWidth },
+                { x: size / 2 - 4, y: halfWidth }
+            ];
+            const ellipse = Array.from({ length: 20 }, (_, i) => {
+                const angle = i * Math.PI * 2 / 20;
+                return {
+                    x: size / 2 - 8 + Math.cos(angle) * size / 3,
+                    y: Math.sin(angle) * size / 6
+                };
+            });
+            for (let i = 0; i < TAIL_RENDER_DIRECTIONS; i++) {
+                const angle = i * Math.PI * 2 / TAIL_RENDER_DIRECTIONS;
+                const cos = Math.cos(angle), sin = Math.sin(angle);
+                const rotate = (point: { x: number; y: number }) => new Phaser.Math.Vector2(
+                    32 + point.x * cos - point.y * sin,
+                    32 + point.x * sin + point.y * cos
+                );
+                graphics.clear();
+                graphics.fillStyle(color, 1);
+                graphics.fillPoints(triangle.map(rotate), true);
+                graphics.fillPoints(ellipse.map(rotate), true);
+                graphics.generateTexture(getTailTextureKey(kind, angle), 64, 64);
+            }
+        }
     }
 
     private generateSkinTextures(g: Phaser.GameObjects.Graphics) {

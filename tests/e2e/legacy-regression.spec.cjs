@@ -267,7 +267,7 @@ test('legacy AB: ordinary prey genuinely flee inward from a right edge and corne
   }
 });
 
-test('legacy J/X: desktop native keyboard uses 220/340 speed and recovers boost after release', async ({ page }) => {
+test('legacy J/X: desktop native keyboard uses 220/340 speed and recovers boost after release', async ({ page }, info) => {
   await boot(page);
   await startGame(page, { value: 10 });
   const controls = await page.evaluate(() => {
@@ -276,18 +276,63 @@ test('legacy J/X: desktop native keyboard uses 220/340 speed and recovers boost 
   });
   expect(controls).toEqual({ joystick: false, boost: false });
   await expect.poll(() => page.evaluate(() => window.__NUMBER_SNAKE_DEBUG__.getPlayerSpeed())).toBeCloseTo(220, 1);
-  await page.keyboard.down('Space');
-  await page.keyboard.down('ArrowDown');
-  await page.waitForTimeout(300);
-  const boosted = await sceneState(page);
-  expect(await page.evaluate(() => window.__NUMBER_SNAKE_DEBUG__.getPlayerSpeed())).toBeCloseTo(340, 1);
-  expect(boosted.energy).toBeLessThan(95);
-  expect(boosted.y).toBeGreaterThan(20);
-  await page.keyboard.up('Space');
-  await page.keyboard.up('ArrowDown');
-  await expect.poll(() => page.evaluate(() => window.__NUMBER_SNAKE_DEBUG__.getPlayerSpeed())).toBeCloseTo(220, 1);
-  await page.waitForTimeout(300);
-  expect((await sceneState(page)).energy).toBeGreaterThan(boosted.energy);
+  const measureLiveMotion = () => page.evaluate(() => new Promise(resolve => {
+    const scene = window.__PHASER_GAME__.scene.getScene('GameScene');
+    const capture = () => ({ frame: scene.game.loop.frame, sceneTime: scene.time.now, performanceTime: performance.now(), x: scene.player.head.x, y: scene.player.head.y, speed: scene.player.head.body.speed, energy: scene.player.boostEnergy, currentAngle: scene.player.currentAngle, targetAngle: scene.player.targetAngle, space: scene.keys.space.isDown, down: scene.keys.down.isDown, state: scene.gameState });
+    const start = capture(), frames = [];
+    let elapsed = 0;
+    const observe = (_time, delta) => {
+      // Clock.now is a raw RAF timestamp; timers, steering and motion consume
+      // the processed Scene delta. Record both instead of relying on wall time.
+      elapsed += delta * scene.time.timeScale;
+      const frame = { ...capture(), delta, elapsed };
+      frames.push(frame);
+      if (elapsed < 300) return;
+      scene.events.off('postupdate', observe);
+      resolve({ start, end: frame, elapsed, displacementY: frame.y - start.y, frames });
+    };
+    scene.events.on('postupdate', observe);
+  }));
+  let keysHeld = false;
+  try {
+    keysHeld = true;
+    await page.keyboard.down('Space');
+    await page.keyboard.down('ArrowDown');
+    await page.waitForFunction(() => {
+      const scene = window.__PHASER_GAME__.scene.getScene('GameScene');
+      const error = Math.atan2(Math.sin(scene.player.currentAngle - Math.PI / 2), Math.cos(scene.player.currentAngle - Math.PI / 2));
+      return scene.keys.space.isDown && scene.keys.down.isDown && Math.abs(error) < 0.08;
+    });
+    const boosted = await measureLiveMotion();
+    await info.attach('desktop-native-boost-frames', { body: JSON.stringify(boosted, null, 2), contentType: 'application/json' });
+    expect(boosted.elapsed).toBeGreaterThanOrEqual(300);
+    expect(boosted.elapsed).toBeLessThan(500);
+    expect(boosted.frames.length).toBeGreaterThan(1);
+    for (const frame of boosted.frames) {
+      expect(frame.speed).toBeCloseTo(340, 1);
+      expect(frame.space && frame.down && frame.state === 'RUNNING').toBe(true);
+    }
+    expect(boosted.end.energy).toBeLessThan(95);
+    expect(boosted.end.energy).toBeLessThan(boosted.start.energy);
+    expect(boosted.end.y).toBeGreaterThan(20);
+    expect(boosted.displacementY).toBeGreaterThan(20);
+    await page.keyboard.up('Space');
+    await page.keyboard.up('ArrowDown');
+    keysHeld = false;
+    await expect.poll(() => page.evaluate(() => window.__NUMBER_SNAKE_DEBUG__.getPlayerSpeed())).toBeCloseTo(220, 1);
+    const recovered = await measureLiveMotion();
+    await info.attach('desktop-native-release-frames', { body: JSON.stringify(recovered, null, 2), contentType: 'application/json' });
+    expect(recovered.elapsed).toBeGreaterThanOrEqual(300);
+    expect(recovered.elapsed).toBeLessThan(500);
+    for (const frame of recovered.frames) {
+      expect(frame.speed).toBeCloseTo(220, 1);
+      expect(!frame.space && !frame.down && frame.state === 'RUNNING').toBe(true);
+    }
+    expect(recovered.end.energy).toBeGreaterThan(recovered.start.energy);
+    expect(recovered.end.energy).toBeGreaterThan(boosted.end.energy);
+  } finally {
+    if (keysHeld) { await page.keyboard.up('Space'); await page.keyboard.up('ArrowDown'); }
+  }
 });
 
 test('legacy K/L/W: native touch drag/up/cancel and boost 340→220 with energy recovery', async ({ browser }) => {

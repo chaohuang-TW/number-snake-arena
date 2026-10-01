@@ -6,6 +6,9 @@ import { PrepScene } from './scenes/PrepScene';
 import { GameScene } from './scenes/GameScene';
 import { PauseScene } from './scenes/PauseScene';
 
+declare const __BUILD_INFO__: { version: string; commit: string; builtAt: string };
+(window as any).__NUMBER_SNAKE_BUILD__ = Object.freeze(__BUILD_INFO__);
+
 const config: Phaser.Types.Core.GameConfig = {
     type: Phaser.AUTO,
     parent: 'game-container',

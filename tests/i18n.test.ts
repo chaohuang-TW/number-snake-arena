@@ -125,7 +125,8 @@ describe('i18n Localization System', () => {
             expect(cjkRegex.test(val), `Key "${key}" in en.ts should not contain CJK characters: "${val}"`).toBe(false);
         }
 
-        expect(en.tutorialText).toBe('Eat numbers smaller than you!\nAvoid numbers bigger than you!');
+        expect(en.tutorialText).toContain('Avoid equal or larger heads');
+        expect(en.tutorialText).toContain('Bodies bounce');
         // langZh intentionally displays Chinese ('繁中')
         expect(en.langZh).toBe('繁中');
         expect(cjkRegex.test(en.langZh)).toBe(true);
@@ -137,6 +138,7 @@ describe('i18n Localization System', () => {
         expect(t('menuTitle')).toBe('數字蛇競技場');
         expect(t('levelSelect')).toBe('關卡選擇');
         expect(t('start')).toBe('開始');
-        expect(t('tutorialText')).toBe('吃掉比你小的數字！\n躲開比你大的數字！');
+        expect(t('tutorialText')).toContain('避開相等或更大的蛇頭');
+        expect(t('tutorialText')).toContain('碰到身體會彈開');
     });
 });

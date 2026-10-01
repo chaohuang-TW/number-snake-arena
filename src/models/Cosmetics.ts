@@ -14,12 +14,13 @@ export class CosmeticsManager {
     };
 
     static load(): CosmeticsData {
+        this.data = { version: 1, selectedHeadSkin: DEFAULT_HEAD_SKIN_ID };
         try {
             const raw = localStorage.getItem(COSMETICS_STORAGE_KEY);
             if (raw) {
                 const parsed = JSON.parse(raw);
                 if (parsed && typeof parsed.selectedHeadSkin === 'string') {
-                    if (HEAD_SKINS[parsed.selectedHeadSkin]) {
+                    if (Object.hasOwn(HEAD_SKINS, parsed.selectedHeadSkin)) {
                         this.data.selectedHeadSkin = parsed.selectedHeadSkin;
                     } else {
                         this.data.selectedHeadSkin = DEFAULT_HEAD_SKIN_ID;
@@ -47,7 +48,7 @@ export class CosmeticsManager {
     }
 
     static setSelectedHeadSkin(skinId: string): boolean {
-        if (HEAD_SKINS[skinId]) {
+        if (Object.hasOwn(HEAD_SKINS, skinId)) {
             this.data.selectedHeadSkin = skinId;
             this.save();
             return true;

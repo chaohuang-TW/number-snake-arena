@@ -1,4 +1,7 @@
 import Phaser from 'phaser';
+import { HEAD_SKIN_LIST, HEAD_TEXTURE_SIZE } from '../config/headSkins';
+import { VisualPreferencesManager } from '../models/VisualPreferences';
+import { TAIL_RENDER_DIRECTIONS, getTailTextureKey } from '../utils/snakeAppearance';
 
 export class BootScene extends Phaser.Scene {
     constructor() {
@@ -10,15 +13,12 @@ export class BootScene extends Phaser.Scene {
     }
 
     create() {
-        // Initialize localStorage defaults
-        if (localStorage.getItem('tutorialSeen') === null) {
-            localStorage.setItem('tutorialSeen', 'false');
-        }
-        if (localStorage.getItem('audioEnabled') === null) {
-            localStorage.setItem('audioEnabled', 'true');
-        }
-        
-        this.scene.start('MenuScene');
+        try {
+            if (localStorage.getItem('tutorialSeen') === null) localStorage.setItem('tutorialSeen', 'false');
+            if (localStorage.getItem('audioEnabled') === null) localStorage.setItem('audioEnabled', 'true');
+        } catch { /* Private browsing must not stop boot. */ }
+        VisualPreferencesManager.load();
+                this.scene.start('MenuScene');
     }
 
     private generateTextures() {
@@ -32,37 +32,31 @@ export class BootScene extends Phaser.Scene {
         graphics.strokeCircle(20, 20, 19);
         graphics.generateTexture('player_head', 40, 40);
 
-        // Player Body Segment
-        graphics.clear();
-        graphics.fillStyle(0x0088ff, 0.85);
-        graphics.fillCircle(15, 15, 15);
-        graphics.lineStyle(2, 0x00ffff, 0.6);
-        graphics.strokeCircle(15, 15, 14);
-        graphics.generateTexture('player_body', 30, 30);
-
-        // Player Tail Tip (tapered teardrop)
-        graphics.clear();
-        graphics.fillStyle(0x0066cc, 0.9);
-        graphics.fillTriangle(0, 15, 30, 5, 30, 25);
-        graphics.fillCircle(20, 15, 8);
-        graphics.lineStyle(2, 0x00ffff, 0.7);
-        graphics.strokeTriangle(0, 15, 30, 5, 30, 25);
-        graphics.generateTexture('player_tail', 30, 30);
-
-        // AI Body Segment
-        graphics.clear();
-        graphics.fillStyle(0x334455, 0.8);
-        graphics.fillCircle(12, 12, 12);
-        graphics.lineStyle(1.5, 0x667788, 0.6);
-        graphics.strokeCircle(12, 12, 11);
-        graphics.generateTexture('enemy_body', 24, 24);
-
-        // AI Tail Tip
-        graphics.clear();
-        graphics.fillStyle(0x223344, 0.85);
-        graphics.fillTriangle(0, 12, 24, 4, 24, 20);
-        graphics.fillCircle(16, 12, 6);
-        graphics.generateTexture('enemy_tail', 24, 24);
+        // Overlapping glossy sections make a continuous ribbon, without bloom emitters.
+        for (const [key, size, color, edge] of [
+            ['player_body', 30, 0x148fac, 0x88f4ed],
+            ['enemy_body', 30, 0x4d647b, 0xa7c3d1]
+        ] as const) {
+            graphics.clear();
+            const r = size / 2;
+            graphics.fillStyle(0x071321, 0.7);
+            graphics.fillCircle(r, r + 1, r - 1);
+            graphics.fillStyle(color, 1);
+            graphics.fillCircle(r, r, r - 1);
+            graphics.lineStyle(1, edge, 0.45);
+            graphics.strokeCircle(r, r, r - 2);
+            graphics.fillStyle(0xffffff, 0.18);
+            graphics.fillEllipse(r, r - size * 0.2, size * 0.62, size * 0.3);
+            graphics.generateTexture(key, size, size);
+        }
+        for (const [key, size, color] of [['player_tail', 30, 0x148fac], ['enemy_tail', 24, 0x4d647b]] as const) {
+            graphics.clear();
+            graphics.fillStyle(color, 1);
+            graphics.fillTriangle(1, size / 2, size - 4, 3, size - 4, size - 3);
+            graphics.fillCircle(size - 8, size / 2, size / 3);
+            graphics.generateTexture(key, size, size);
+        }
+        this.generateDirectionalTailTextures(graphics);
 
         // Collectible Body Orb
         graphics.clear();
@@ -150,156 +144,114 @@ export class BootScene extends Phaser.Scene {
         graphics.destroy();
     }
 
+    private generateDirectionalTailTextures(graphics: Phaser.GameObjects.Graphics) {
+        // Bake orientation into padded textures: runtime rotation clips mixed-texture
+        // quads in the current WebGL renderer. Legacy tails remain for menu previews.
+        for (const [kind, size, color] of [['player', 30, 0x148fac], ['enemy', 24, 0x4d647b]] as const) {
+            const halfWidth = (size / 2 - 3) * 0.5;
+            const triangle = [
+                { x: -size / 2 + 1, y: 0 },
+                { x: size / 2 - 4, y: -halfWidth },
+                { x: size / 2 - 4, y: halfWidth }
+            ];
+            const ellipse = Array.from({ length: 20 }, (_, i) => {
+                const angle = i * Math.PI * 2 / 20;
+                return {
+                    x: size / 2 - 8 + Math.cos(angle) * size / 3,
+                    y: Math.sin(angle) * size / 6
+                };
+            });
+            for (let i = 0; i < TAIL_RENDER_DIRECTIONS; i++) {
+                const angle = i * Math.PI * 2 / TAIL_RENDER_DIRECTIONS;
+                const cos = Math.cos(angle), sin = Math.sin(angle);
+                const rotate = (point: { x: number; y: number }) => new Phaser.Math.Vector2(
+                    32 + point.x * cos - point.y * sin,
+                    32 + point.x * sin + point.y * cos
+                );
+                graphics.clear();
+                graphics.fillStyle(color, 1);
+                graphics.fillPoints(triangle.map(rotate), true);
+                graphics.fillPoints(ellipse.map(rotate), true);
+                graphics.generateTexture(getTailTextureKey(kind, angle), 64, 64);
+            }
+        }
+    }
+
     private generateSkinTextures(g: Phaser.GameObjects.Graphics) {
-        // 1. CLASSIC
-        // Player (40x40)
-        g.clear();
-        g.fillStyle(0x00c8ff, 1);
-        g.fillCircle(20, 20, 20);
-        g.lineStyle(2, 0xffffff, 0.9);
-        g.strokeCircle(20, 20, 19);
-        g.fillStyle(0xffffff, 0.4);
-        g.fillCircle(20, 12, 5);
-        g.generateTexture('skin_head_classic_p', 40, 40);
-
-        // Enemy (36x36)
-        g.clear();
-        g.fillStyle(0x2288bb, 1);
-        g.fillCircle(18, 18, 18);
-        g.lineStyle(2, 0xffffff, 0.7);
-        g.strokeCircle(18, 18, 17);
-        g.generateTexture('skin_head_classic_e', 36, 36);
-
-        // 2. BOLT
-        // Player (40x40) - Gold/Yellow with Lightning Fins
-        g.clear();
-        g.fillStyle(0xffcc00, 1);
-        g.fillCircle(20, 20, 20);
-        // Lightning bolt crest on side/top
-        g.fillStyle(0xff9900, 1);
-        g.fillTriangle(10, 4, 20, 0, 16, 12);
-        g.fillTriangle(30, 4, 20, 0, 24, 12);
-        g.lineStyle(2, 0xffffff, 0.9);
-        g.strokeCircle(20, 20, 19);
-        g.generateTexture('skin_head_bolt_p', 40, 40);
-
-        // Enemy (36x36)
-        g.clear();
-        g.fillStyle(0xcc9900, 1);
-        g.fillCircle(18, 18, 18);
-        g.fillStyle(0xff6600, 1);
-        g.fillTriangle(9, 3, 18, 0, 14, 10);
-        g.fillTriangle(27, 3, 18, 0, 22, 10);
-        g.lineStyle(2, 0xffe600, 0.8);
-        g.strokeCircle(18, 18, 17);
-        g.generateTexture('skin_head_bolt_e', 36, 36);
-
-        // 3. MECHA
-        // Player (40x40) - Cybernetic Steel & Cyan Visor
-        g.clear();
-        g.fillStyle(0x334466, 1);
-        g.fillCircle(20, 20, 20);
-        g.lineStyle(3, 0x00ffcc, 1);
-        g.strokeCircle(20, 20, 19);
-        // Visor slit
-        g.fillStyle(0x00ffff, 1);
-        g.fillRect(8, 16, 24, 8);
-        g.fillStyle(0xffffff, 0.9);
-        g.fillRect(14, 18, 12, 4);
-        g.generateTexture('skin_head_mecha_p', 40, 40);
-
-        // Enemy (36x36)
-        g.clear();
-        g.fillStyle(0x2a3344, 1);
-        g.fillCircle(18, 18, 18);
-        g.lineStyle(2, 0x00ccaa, 0.9);
-        g.strokeCircle(18, 18, 17);
-        g.fillStyle(0x00ddff, 1);
-        g.fillRect(7, 14, 22, 7);
-        g.generateTexture('skin_head_mecha_e', 36, 36);
-
-        // 4. DRAGON
-        // Player (40x40) - Purple with Horns
-        g.clear();
-        // Horns
-        g.fillStyle(0xcc00ff, 1);
-        g.fillTriangle(6, 12, 12, 2, 16, 14);
-        g.fillTriangle(34, 12, 28, 2, 24, 14);
-        // Head
-        g.fillStyle(0x6611aa, 1);
-        g.fillCircle(20, 20, 19);
-        g.lineStyle(2, 0xff33cc, 0.9);
-        g.strokeCircle(20, 20, 19);
-        // Reptilian slit eyes
-        g.fillStyle(0xffff00, 1);
-        g.fillRect(12, 16, 3, 7);
-        g.fillRect(25, 16, 3, 7);
-        g.generateTexture('skin_head_dragon_p', 40, 40);
-
-        // Enemy (36x36)
-        g.clear();
-        g.fillStyle(0xaa00cc, 1);
-        g.fillTriangle(5, 10, 11, 2, 14, 12);
-        g.fillTriangle(31, 10, 25, 2, 22, 12);
-        g.fillStyle(0x550088, 1);
-        g.fillCircle(18, 18, 17);
-        g.lineStyle(2, 0xdd22aa, 0.8);
-        g.strokeCircle(18, 18, 17);
-        g.generateTexture('skin_head_dragon_e', 36, 36);
-
-        // 5. FLAME
-        // Player (40x40) - Fire Orange/Red with Flame Spikes
-        g.clear();
-        g.fillStyle(0xff3300, 1);
-        // Flames on top
-        g.fillTriangle(10, 10, 15, 0, 20, 12);
-        g.fillTriangle(20, 12, 25, 0, 30, 10);
-        g.fillCircle(20, 20, 19);
-        g.fillStyle(0xffaa00, 1);
-        g.fillCircle(20, 20, 14);
-        g.lineStyle(2, 0xffff66, 0.9);
-        g.strokeCircle(20, 20, 19);
-        g.generateTexture('skin_head_flame_p', 40, 40);
-
-        // Enemy (36x36)
-        g.clear();
-        g.fillStyle(0xdd2200, 1);
-        g.fillTriangle(9, 9, 14, 0, 18, 11);
-        g.fillTriangle(18, 11, 22, 0, 27, 9);
-        g.fillCircle(18, 18, 17);
-        g.fillStyle(0xee8800, 1);
-        g.fillCircle(18, 18, 12);
-        g.generateTexture('skin_head_flame_e', 36, 36);
-
-        // 6. ALIEN
-        // Player (40x40) - Lime Green with Large Dark Alien Eyes
-        g.clear();
-        g.fillStyle(0x33ee33, 1);
-        g.fillCircle(20, 20, 20);
-        // Antennae
-        g.lineStyle(2, 0x22aa22, 1);
-        g.lineBetween(14, 6, 8, 1);
-        g.lineBetween(26, 6, 32, 1);
-        g.fillStyle(0x00ff88, 1);
-        g.fillCircle(8, 1, 3);
-        g.fillCircle(32, 1, 3);
-        // Alien large dark eyes
-        g.fillStyle(0x002200, 1);
-        g.fillCircle(13, 18, 5);
-        g.fillCircle(27, 18, 5);
-        g.lineStyle(2, 0x88ff88, 0.8);
-        g.strokeCircle(20, 20, 19);
-        g.generateTexture('skin_head_alien_p', 40, 40);
-
-        // Enemy (36x36)
-        g.clear();
-        g.fillStyle(0x22bb22, 1);
-        g.fillCircle(18, 18, 18);
-        g.fillStyle(0x002200, 1);
-        g.fillCircle(12, 16, 4);
-        g.fillCircle(24, 16, 4);
-        g.lineStyle(2, 0x66dd66, 0.8);
-        g.strokeCircle(18, 18, 17);
-        g.generateTexture('skin_head_alien_e', 36, 36);
+        // A 64px canvas leaves real silhouette space outside the unchanged central collider.
+        for (const skin of HEAD_SKIN_LIST) {
+            for (const isPlayer of [true, false]) {
+                g.clear();
+                const x = 32, y = 32, r = isPlayer ? 20 : 18;
+                const color = skin.accentColor;
+                const outline = isPlayer ? 0xb8ffff : 0xe5edf6;
+                g.lineStyle(2, outline, 0.85);
+                g.fillStyle(skin.detailColor, 1);
+                // Every accessory changes the outer shape rather than repainting a disk.
+                if (skin.silhouette === 'lightning') {
+                    g.fillTriangle(14, 25, 3, 11, 22, 15);
+                    g.fillTriangle(15, 22, 5, 31, 21, 30);
+                    g.fillTriangle(49, 25, 61, 11, 41, 15);
+                    g.fillTriangle(48, 22, 59, 31, 43, 30);
+                } else if (skin.silhouette === 'horns') {
+                    g.fillStyle(0xffe0a3, 1);
+                    g.fillTriangle(16, 25, 10, 6, 26, 17);
+                    g.fillTriangle(48, 25, 54, 6, 38, 17);
+                    g.fillStyle(skin.detailColor, 1);
+                    g.fillTriangle(13, 37, 4, 29, 15, 25);
+                    g.fillTriangle(51, 37, 60, 29, 49, 25);
+                } else if (skin.silhouette === 'flames') {
+                    g.fillStyle(0xffbd6b, 1);
+                    g.fillTriangle(13, 23, 15, 6, 27, 24);
+                    g.fillTriangle(22, 21, 33, 1, 42, 23);
+                    g.fillTriangle(37, 23, 50, 5, 52, 27);
+                    g.fillStyle(0xff713f, 1);
+                    g.fillTriangle(22, 22, 33, 8, 43, 25);
+                } else if (skin.silhouette === 'antennae') {
+                    g.lineStyle(3, color, 1);
+                    g.lineBetween(22, 20, 14, 7);
+                    g.lineBetween(42, 20, 50, 7);
+                    g.fillStyle(0xc6ffc2, 1);
+                    g.fillCircle(13, 6, 5);
+                    g.fillCircle(51, 6, 5);
+                }
+                g.fillStyle(0x031a29, 0.85);
+                if (skin.silhouette === 'mask') {
+                    g.fillRoundedRect(9, 15, 46, 38, 9);
+                    g.fillStyle(0x536784, 1);
+                    g.fillRoundedRect(10, 13, 44, 37, 9);
+                    g.fillStyle(0x90eeea, 1);
+                    g.fillRoundedRect(15, 22, 34, 16, 5);
+                    g.fillStyle(0x173046, 1);
+                    g.fillRoundedRect(18, 26, 28, 9, 4);
+                    g.fillStyle(0xf3ffff, 1);
+                    g.fillRect(13, 42, 9, 3);
+                    g.fillRect(42, 42, 9, 3);
+                } else {
+                    g.fillEllipse(x, y + 3, r * 2, r * 2);
+                    g.fillStyle(color, 1);
+                    if (skin.silhouette === 'antennae') g.fillEllipse(x, y, r * 1.9, r * 2.05);
+                    else g.fillCircle(x, y, r);
+                    g.lineStyle(1.5, outline, 0.7);
+                    g.strokeEllipse(x, y, r * 1.9, r * 1.9);
+                    g.fillStyle(0xffffff, 0.26);
+                    g.fillEllipse(x - 4, y - 10, r * 1.2, 9);
+                }
+                // Eyes and glints are below the separate number badge.
+                const eyeR = skin.silhouette === 'antennae' ? 6 : 4.5;
+                g.fillStyle(0xffffff, 1);
+                g.fillEllipse(24, 31, eyeR * 1.8, eyeR * 2);
+                g.fillEllipse(40, 31, eyeR * 1.8, eyeR * 2);
+                g.fillStyle(0x10243a, 1);
+                g.fillCircle(25, 32, eyeR * 0.6);
+                g.fillCircle(41, 32, eyeR * 0.6);
+                g.fillStyle(0xffffff, 1);
+                g.fillCircle(24, 30, 1.5);
+                g.fillCircle(40, 30, 1.5);
+                g.lineStyle(1.5, 0x10243a, 0.8);
+                g.lineBetween(29, 41, 35, 41);
+                g.generateTexture(isPlayer ? skin.playerTexture : skin.enemyTexture, HEAD_TEXTURE_SIZE, HEAD_TEXTURE_SIZE);
+            }
+        }
     }
 }

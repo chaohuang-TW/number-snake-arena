@@ -42,6 +42,7 @@ export function getLanguage(): Language {
 export function setLanguage(lang: Language): void {
     const validLang: Language = (lang === 'en') ? 'en' : 'zh-TW';
     currentLanguage = validLang;
+    if (typeof document !== 'undefined') document.documentElement.lang = validLang === 'zh-TW' ? 'zh-Hant' : 'en';
 
     try {
         if (typeof localStorage !== 'undefined') {

@@ -1,4 +1,24 @@
 export const GameBalance = {
+    snake: {
+        baseLength: 36,
+        sqrtScale: 24,
+        minLength: 60,
+        maxLength: 720,
+        sampleSpacing: 18,
+        maxRenderSegments: 40,
+        pathRecordSpacing: 4,
+        growthSpeed: 180,
+    },
+    bodyCollision: {
+        spatialCellSize: 64,
+        detectionCooldownMs: 450,
+        recoilDurationMs: 150,
+        separationPx: 18,
+        maxImpulsePx: 28,
+        sweptRadiusPadding: 0,
+        neckSafeDistance: 44,
+        recoilSpeed: 260,
+    },
     player: {
         initialValue: 5,
         initialHP: 3,
@@ -81,9 +101,12 @@ export const GameBalance = {
         orbPullSpeed: 480 // px/s
     },
     orb: {
-        scoreReward: 10,
-        boostReward: 2,
         lifetime: 11000, // ms
-        maxActive: 80
+        maxActive: 160,
+        chainTransformMinMs: 250,
+        chainTransformMaxMs: 450,
+        rewardScorePerSnake: 50,
+        rewardEnergyPerSnake: 10,
+        rewardValuePerSnake: 0,
     }
 };

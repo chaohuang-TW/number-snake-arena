@@ -1,4 +1,6 @@
 import Phaser from 'phaser';
+import { VisualPreferencesManager } from '../models/VisualPreferences';
+import { arcadeButton, uiText, safeInsets, uiUnit, ARCADE, type ArcadeButton } from './ArcadeStyle';
 import { t } from '../i18n';
 import { WHEEL_REWARDS, type WheelReward, pickWheelReward } from '../utils/luckyWheel';
 
@@ -30,6 +32,8 @@ export class LuckyWheelOverlay {
     public forcedRewardId: string | null = null;
 
     private wheelRadius: number = 140;
+    private spinControl!: ArcadeButton;
+    private confirmControl!: ArcadeButton;
 
     constructor(scene: Phaser.Scene, onComplete?: (reward: WheelReward) => void) {
         this.scene = scene;
@@ -47,7 +51,7 @@ export class LuckyWheelOverlay {
 
         // Title
         this.titleText = scene.add.text(w / 2, 45, t('wheelTitle'), {
-            fontSize: '36px',
+            fontFamily: ARCADE.font, fontSize: `${uiUnit(scene, 32)}px`,
             fontStyle: 'bold',
             color: '#ffd700'
         }).setOrigin(0.5).setScrollFactor(0);
@@ -111,12 +115,13 @@ export class LuckyWheelOverlay {
             const tx = Math.cos(midAngle) * textDist;
             const ty = Math.sin(midAngle) * textDist;
 
-            const labelStr = t(reward.labelKey);
+            const labelStr = t(reward.labelKey).replace(' +', '\n+');
             const textObj = this.scene.add.text(tx, ty, labelStr, {
-                fontSize: '13px',
+                fontFamily: ARCADE.font, fontSize: `${uiUnit(this.scene, 16)}px`,
                 fontStyle: 'bold',
                 color: '#ffffff',
-                align: 'center'
+                align: 'center',
+                wordWrap: { width: this.wheelRadius * 0.75 }
             }).setOrigin(0.5);
             textObj.setRotation(midAngle + Math.PI / 2);
 
@@ -137,23 +142,11 @@ export class LuckyWheelOverlay {
     }
 
     private createSpinButton(x: number, y: number) {
-        this.spinBtnBg = this.scene.add.rectangle(x, y, 160, 44, 0x00aa00, 1)
-            .setScrollFactor(0)
-            .setStrokeStyle(3, 0x00ff88)
-            .setInteractive({ useHandCursor: true });
-        this.spinBtnBg.setName('wheelSpinBtn');
-
-        this.spinBtnText = this.scene.add.text(x, y, t('spin'), {
-            fontSize: '24px',
-            fontStyle: 'bold',
-            color: '#ffffff'
-        }).setOrigin(0.5).setScrollFactor(0);
-
-        this.spinBtnBg.on('pointerdown', () => {
-            this.spin();
-        });
-
-        this.container.add([this.spinBtnBg, this.spinBtnText]);
+        this.spinControl = arcadeButton(this.scene, x, y, 224, t('spin'), () => this.spin(), 'wheelSpinBtn');
+        this.spinBtnBg = this.spinControl.bg.setScrollFactor(0);
+        this.spinBtnText = this.spinControl.label.setScrollFactor(0);
+        this.spinControl.art.setScrollFactor(0);
+        this.container.add([this.spinControl.art, this.spinBtnBg, this.spinBtnText]);
     }
 
     public get spinBtn(): Phaser.GameObjects.Rectangle {
@@ -169,48 +162,21 @@ export class LuckyWheelOverlay {
 
     private createResultSection(x: number, y: number) {
         this.resultContainer = this.scene.add.container(0, 0).setScrollFactor(0).setVisible(false);
-
-        this.cardBg = this.scene.add.rectangle(x, y, 280, 96, 0x112233, 0.95)
-            .setScrollFactor(0)
-            .setStrokeStyle(2, 0xffd700);
-
-        this.resultTitleText = this.scene.add.text(x, y - 32, t('yourReward'), {
-            fontSize: '14px',
-            fontStyle: 'bold',
-            color: '#aaaaaa'
-        }).setOrigin(0.5).setScrollFactor(0);
-
-        this.resultRewardText = this.scene.add.text(x, y - 12, '', {
-            fontSize: '20px',
-            fontStyle: 'bold',
-            color: '#ffd700'
-        }).setOrigin(0.5).setScrollFactor(0);
-
-        this.faceBossBtnBg = this.scene.add.rectangle(x, y + 24, 230, 36, 0x990000, 1)
-            .setScrollFactor(0)
-            .setStrokeStyle(2, 0xff4444)
-            .setInteractive({ useHandCursor: true });
-        this.faceBossBtnBg.setName('faceUltimateBossBtn');
-
-        this.faceBossBtnText = this.scene.add.text(x, y + 24, t('faceUltimateBoss'), {
-            fontSize: '16px',
-            fontStyle: 'bold',
-            color: '#ffffff'
-        }).setOrigin(0.5).setScrollFactor(0);
-
-        this.faceBossBtnBg.on('pointerdown', () => {
-            if (this.selectedReward && this.onCompleteCallback && !this.completed) {
-                this.completed = true;
-                if (this.faceBossBtnBg && this.faceBossBtnBg.scene && this.faceBossBtnBg.scene.sys) {
-                    try { this.faceBossBtnBg.disableInteractive(); } catch {}
-                }
-                const cb = this.onCompleteCallback;
-                this.onCompleteCallback = undefined;
-                cb(this.selectedReward);
-            }
-        });
-
-        this.resultContainer.add([this.cardBg, this.resultTitleText, this.resultRewardText, this.faceBossBtnBg, this.faceBossBtnText]);
+        this.cardBg = this.scene.add.rectangle(x, y, 318, 150, ARCADE.panel, 0).setScrollFactor(0);
+        this.resultTitleText = uiText(this.scene, x, y - 51, t('yourReward'), 16, ARCADE.muted).setScrollFactor(0);
+        this.resultRewardText = uiText(this.scene, x, y - 21, '', 22, '#ffe4a5').setScrollFactor(0);
+        this.confirmControl = arcadeButton(this.scene, x, y + 39, 318, t('faceUltimateBoss'), () => {
+            if (!this.selectedReward || !this.onCompleteCallback || this.completed) return;
+            this.completed = true;
+            this.faceBossBtnBg.disableInteractive();
+            const callback = this.onCompleteCallback;
+            this.onCompleteCallback = undefined;
+            callback(this.selectedReward);
+        }, 'faceUltimateBossBtn');
+        this.faceBossBtnBg = this.confirmControl.bg.setScrollFactor(0);
+        this.faceBossBtnText = this.confirmControl.label.setScrollFactor(0);
+        this.confirmControl.art.setScrollFactor(0);
+        this.resultContainer.add([this.cardBg, this.resultTitleText, this.resultRewardText, this.confirmControl.art, this.faceBossBtnBg, this.faceBossBtnText]);
         this.container.add(this.resultContainer);
     }
 
@@ -247,12 +213,13 @@ export class LuckyWheelOverlay {
         const baseAlignment = -Math.PI / 2 - targetSectorCenter;
 
         // Add 5 full rotations (10*PI) for cinematic spin
-        const totalRotation = Math.PI * 10 + baseAlignment;
+        const preferences = VisualPreferencesManager.get();
+        const totalRotation = (preferences.reducedMotion ? 0 : Math.PI * 10) + baseAlignment;
 
         this.scene.tweens.add({
             targets: this.wheelContainer,
             rotation: totalRotation,
-            duration: 3000,
+            duration: preferences.reducedMotion ? 120 : 3000,
             ease: 'Cubic.easeOut',
             onComplete: () => {
                 this.isSpinning = false;
@@ -268,19 +235,20 @@ export class LuckyWheelOverlay {
 
         // Hide spin button, show result
         this.spinBtnBg.setVisible(false);
+        this.spinControl.art.setVisible(false);
         this.spinBtnText.setVisible(false);
 
         this.resultRewardText.setText(t(this.selectedReward.labelKey));
         this.resultContainer.setVisible(true);
         this.rewardApplied = true;
 
-        // Flash pointer
-        this.scene.tweens.add({
+        // A single soft pulse; suppressed by presentation preferences.
+        if (!VisualPreferencesManager.get().reducedMotion && !VisualPreferencesManager.get().lowEffects) this.scene.tweens.add({
             targets: this.pointer,
             scale: 1.4,
             yoyo: true,
             duration: 200,
-            repeat: 2
+            repeat: 0
         });
     }
 
@@ -294,35 +262,30 @@ export class LuckyWheelOverlay {
             w = sizeOrW.width;
             h = sizeOrW.height;
         }
+        const safe = safeInsets(this.scene);
         this.bgDim.setPosition(w / 2, h / 2).setSize(w, h);
-        this.titleText.setPosition(w / 2, Math.max(30, h * 0.08));
-
-        // Adapt wheel size to compact screen
-        const availableHeight = h - 220;
-        const availableWidth = w - 40;
-        const maxRadius = Math.min(150, availableHeight / 2.3, availableWidth / 2.3);
-        const radius = Math.max(105, maxRadius);
-
-        if (radius !== this.wheelRadius) {
-            this.wheelRadius = radius;
-            this.drawWheel();
-        }
-
-        const centerY = Math.max(160, h * 0.44);
-        this.wheelContainer.setPosition(w / 2, centerY);
-        this.pointer.setPosition(w / 2, centerY - this.wheelRadius - 6);
-
-        const actionY = Math.min(h - 55, centerY + this.wheelRadius + 50);
-        this.spinBtnBg.setPosition(w / 2, actionY);
-        this.spinBtnText.setPosition(w / 2, actionY);
-        if (this.cardBg) this.cardBg.setPosition(w / 2, actionY);
-        if (this.resultTitleText) this.resultTitleText.setPosition(w / 2, actionY - 32);
-        if (this.resultRewardText) this.resultRewardText.setPosition(w / 2, actionY - 12);
-        if (this.faceBossBtnBg) this.faceBossBtnBg.setPosition(w / 2, actionY + 24);
-        if (this.faceBossBtnText) this.faceBossBtnText.setPosition(w / 2, actionY + 24);
+        this.titleText.setPosition(w / 2, safe.top + 39);
+        const landscape = w > h;
+        const availableHeight = h - safe.top - safe.bottom - (landscape ? 105 : 290);
+        const radius = Math.max(90, Math.min(landscape ? 220 : 168, availableHeight / 2, (landscape ? w * 0.45 : w - safe.left - safe.right - 56) / 2));
+        if (radius !== this.wheelRadius) { this.wheelRadius = radius; this.drawWheel(); }
+        const wheelX = landscape ? w * 0.28 : w / 2;
+        const centerY = landscape ? safe.top + (h - safe.top - safe.bottom) / 2 + 10 : safe.top + 113 + radius;
+        this.wheelContainer.setPosition(wheelX, centerY);
+        this.pointer.setPosition(wheelX, centerY - radius - 6);
+        const actionX = landscape ? w * 0.74 : w / 2;
+        const actionY = landscape ? centerY : Math.min(h - safe.bottom - 113, centerY + radius + 82);
+        this.spinControl.move(actionX, actionY);
+        this.cardBg.setPosition(actionX, actionY);
+        this.resultTitleText.setPosition(actionX, actionY - 51);
+        this.resultRewardText.setPosition(actionX, actionY - 21);
+        this.confirmControl.move(actionX, actionY + 39);
     }
 
     public destroy() {
+        this.scene.tweens.killTweensOf(this.wheelContainer);
+        this.scene.tweens.killTweensOf(this.pointer);
+        this.onCompleteCallback = undefined;
         this.container.destroy();
     }
 }

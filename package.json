@@ -1,15 +1,16 @@
 {
   "name": "number-snake-arena",
   "private": true,
-  "version": "0.6.2",
+  "version": "0.7.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:e2e": "BASE_URL=http://localhost:3000/ node tests/e2e/run-e2e.cjs",
-    "test:prod": "BASE_URL=https://chaohuang-TW.github.io/number-snake-arena/ node tests/e2e/run-e2e.cjs"
+    "test:e2e": "node scripts/test-e2e.cjs",
+    "test:prod": "BASE_URL=https://chaohuang-TW.github.io/number-snake-arena/ node scripts/test-e2e.cjs",
+    "test:perf": "PERF_TEST=1 node scripts/test-e2e.cjs --grep \"full load\""
   },
   "dependencies": {
     "phaser": "4.2.1"
@@ -17,7 +18,7 @@
   "devDependencies": {
     "playwright": "^1.62.1",
     "typescript": "~5.6.2",
-    "vite": "^5.4.11",
-    "vitest": "^2.1.8"
+    "vite": "6.4.3",
+    "vitest": "4.1.11"
   }
 }

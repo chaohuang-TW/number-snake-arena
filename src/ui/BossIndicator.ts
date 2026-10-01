@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import type { RectBounds } from '../utils/layout';
 import { rectsOverlap } from '../utils/layout';
 import { t } from '../i18n';
+import { uiUnit, safeInsets, ARCADE } from './ArcadeStyle';
 
 export interface BossIndicatorTarget {
     body?: { x: number; y: number; active?: boolean };
@@ -16,13 +17,15 @@ export class BossIndicator {
     private arrow: Phaser.GameObjects.Text;
     private text: Phaser.GameObjects.Text;
 
-    private panelWidth: number = 96;
-    private panelHeight: number = 28;
+    private panelWidth: number = 140;
+    private panelHeight: number = 38;
+    private safe: ReturnType<typeof safeInsets>;
     private currentValue: number = 0;
     private currentAngle: number = 0;
 
     constructor(scene: Phaser.Scene) {
         this.scene = scene;
+        this.safe = safeInsets(scene);
         this.container = scene.add.container(0, 0).setScrollFactor(0).setDepth(205).setVisible(false);
 
         this.bg = scene.add.graphics();
@@ -30,15 +33,15 @@ export class BossIndicator {
 
         // Arrow icon pointing towards Boss
         this.arrow = scene.add.text(0, 0, '▶', {
-            fontSize: '14px',
+            fontFamily: ARCADE.font, fontSize: `${uiUnit(scene, 18)}px`,
             fontStyle: 'bold',
             color: '#ffd700'
         }).setOrigin(0.5);
         this.container.add(this.arrow);
 
         // Boss label text
-        this.text = scene.add.text(0, 0, 'BOSS', {
-            fontSize: '12px',
+        this.text = scene.add.text(0, 0, t('bossLabel', { value: 100 }), {
+            fontFamily: ARCADE.font, fontSize: `${uiUnit(scene, 16)}px`,
             fontStyle: 'bold',
             color: '#ffffff'
         }).setOrigin(0.5);
@@ -56,7 +59,7 @@ export class BossIndicator {
     }
 
     public resize(_gameSize?: any) {
-        // Boss indicator repositions dynamically in update()
+        this.safe = safeInsets(this.scene);
     }
 
     public update(boss: BossIndicatorTarget | null, camera: Phaser.Cameras.Scene2D.Camera, obstacles: RectBounds[] = []) {
@@ -115,10 +118,11 @@ export class BossIndicator {
         const viewH = camera.height;
         const edgeMargin = 45; // 40-60px margin
 
-        const minX = this.panelWidth / 2 + 10;
-        const maxX = viewW - this.panelWidth / 2 - 10;
-        const minY = this.panelHeight / 2 + 10;
-        const maxY = viewH - this.panelHeight / 2 - 10;
+        const safe = this.safe;
+        const minX = this.panelWidth / 2 + safe.left + 10;
+        const maxX = viewW - this.panelWidth / 2 - safe.right - 10;
+        const minY = this.panelHeight / 2 + safe.top + 10;
+        const maxY = viewH - this.panelHeight / 2 - safe.bottom - 10;
 
         const scx = viewW / 2;
         const scy = viewH / 2;

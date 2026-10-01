@@ -55,3 +55,29 @@ describe('Layout Geometry Helpers', () => {
         });
     });
 });
+
+import { arenaUiLayout, canvasUnitsForCssPixels } from '../src/utils/layout';
+
+describe('Responsive touch reserves and CSS sizing', () => {
+    it.each([[390, 844], [430, 932], [844, 390], [932, 430], [768, 1024], [1024, 768], [834, 1194], [1024, 1366], [1366, 768], [1920, 1080]])('keeps controls and Top5 apart at %ix%i', (width, height) => {
+        const ui = arenaUiLayout(width, height, { top: 0, left: 0, right: 0, bottom: 0 });
+        const circle = (c: { x: number; y: number; radius: number }) => ({ x: c.x - c.radius, y: c.y - c.radius, width: c.radius * 2, height: c.radius * 2 });
+        const viewport = { x: 0, y: 0, width, height };
+        for (const rect of [ui.ranking, circle(ui.boost), circle(ui.magnet), circle(ui.joystick)]) expect(isRectInside(rect, viewport)).toBe(true);
+        expect(rectsOverlap(circle(ui.boost), circle(ui.magnet))).toBe(false);
+        expect(rectsOverlap(ui.ranking, circle(ui.magnet))).toBe(false);
+        expect(rectsOverlap(ui.ranking, circle(ui.boost))).toBe(false);
+    });
+    it('converts CSS targets using actual canvas display scale instead of assuming pixels match', () => {
+        expect(canvasUnitsForCssPixels(48, 780, 390)).toBe(96);
+        expect(canvasUnitsForCssPixels(18, 780, 390)).toBe(36);
+        expect(canvasUnitsForCssPixels(16, 390, 390)).toBe(16);
+        expect(canvasUnitsForCssPixels(48, 0, 0)).toBe(48);
+    });
+    it('reserves safe areas for left and bottom controls', () => {
+        const ui = arenaUiLayout(932, 430, { top: 0, right: 44, left: 44, bottom: 21 });
+        expect(ui.joystick.x - ui.joystick.radius).toBeGreaterThan(44);
+        expect(ui.boost.y + ui.boost.radius).toBeLessThan(430 - 21);
+        expect(ui.boost.x + ui.boost.radius).toBeLessThan(932 - 44);
+    });
+});

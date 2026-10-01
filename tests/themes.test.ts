@@ -42,3 +42,15 @@ describe('Level Background Themes', () => {
         expect(LEVELS[5]).toBeUndefined();
     });
 });
+
+
+import { ARENA_THEME_PALETTES, MAX_AMBIENT_EFFECTS } from '../src/config/visuals';
+
+describe('Decorative theme budget', () => {
+    it('has a distinct dark field and visible boundary for all four themes', () => {
+        expect(Object.keys(ARENA_THEME_PALETTES).sort()).toEqual(Object.values(LEVELS).map(level => level.theme).sort());
+        expect(new Set(Object.values(ARENA_THEME_PALETTES).map(theme => theme.ground)).size).toBe(4);
+        for (const theme of Object.values(ARENA_THEME_PALETTES)) expect(theme.edge).not.toBe(theme.ground);
+    });
+    it('caps ambient effects independently of game object budgets', () => { expect(MAX_AMBIENT_EFFECTS).toBe(6); });
+});

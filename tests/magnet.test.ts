@@ -1,8 +1,23 @@
 import { describe, it, expect } from 'vitest';
 import { isMagnetEligible } from '../src/utils/gameRules';
 import { GameBalance } from '../src/config/gameBalance';
+import { MagnetContactGuard } from '../src/systems/MagnetContactGuard';
 
 describe('Magnet Ability', () => {
+    it('suppresses only the contacted enemy for 450ms and cleans expired/reset entries', () => {
+        const guard = new MagnetContactGuard();
+        guard.suppress('enemy1', 1450);
+        expect(guard.isSuppressed('enemy1', 1000)).toBe(true);
+        expect(guard.isSuppressed('enemy1', 1449)).toBe(true);
+        expect(guard.isSuppressed('enemy2', 1000)).toBe(false);
+        expect(guard.isSuppressed('enemy1', 1450)).toBe(false);
+        guard.suppress('enemy1', 2000);
+        guard.forget('enemy1');
+        expect(guard.isSuppressed('enemy1', 1500)).toBe(false);
+        guard.suppress('enemy2', 2000);
+        guard.clear();
+        expect(guard.isSuppressed('enemy2', 1500)).toBe(false);
+    });
     describe('Balance Configuration', () => {
         it('has correct radius, duration, and cooldown', () => {
             expect(GameBalance.magnet.radius).toBe(260);

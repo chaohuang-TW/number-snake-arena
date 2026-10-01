@@ -59,3 +59,15 @@ describe('CosmeticsManager', () => {
         expect(CosmeticsManager.getSelectedHeadSkin()).toBe('classic');
     });
 });
+
+
+describe('v0.7 silhouette identity', () => {
+    it('preserves IDs while defining six genuinely different shape recipes and translated names', () => {
+        expect(new Set(HEAD_SKIN_LIST.map(skin => skin.silhouette)).size).toBe(6);
+        expect(new Set(HEAD_SKIN_LIST.map(skin => skin.nameKey)).size).toBe(6);
+    });
+    it('rejects prototype keys as invalid cosmetics instead of accepting inherited properties', () => {
+        expect(CosmeticsManager.setSelectedHeadSkin('constructor')).toBe(false);
+        expect(CosmeticsManager.setSelectedHeadSkin('toString')).toBe(false);
+    });
+});

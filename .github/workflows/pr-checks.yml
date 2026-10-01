@@ -1,0 +1,33 @@
+name: Candidate checks
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: candidate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: node scripts/record-command.cjs npm-ci npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: node scripts/record-command.cjs unit npm run test
+      - run: node scripts/record-command.cjs build npm run build
+      - run: node scripts/record-command.cjs e2e npm run test:e2e
+        env:
+          EVIDENCE_DIR: test-results
+          EXPECT_BUILD_COMMIT: ${{ github.sha }}
+      - name: Save raw acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: candidate-evidence-${{ github.sha }}
+          path: test-results/
+          retention-days: 30

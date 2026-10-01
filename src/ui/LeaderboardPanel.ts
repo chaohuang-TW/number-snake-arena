@@ -1,5 +1,7 @@
 import type { RankingResult, RankedParticipant } from '../utils/ranking';
-import type { RectBounds } from '../utils/layout';
+import { arenaUiLayout, type RectBounds } from '../utils/layout';
+import { safeInsets, uiUnit, ARCADE } from './ArcadeStyle';
+import Phaser from 'phaser';
 import { t } from '../i18n';
 
 export class LeaderboardPanel {
@@ -16,24 +18,24 @@ export class LeaderboardPanel {
     // 6th compact row for player when outside top 5
     private playerExtraRow: Phaser.GameObjects.Text;
 
-    private panelWidth: number = 190;
-    private panelHeight: number = 160;
+    private panelWidth: number = 208;
+    private panelHeight: number = 186;
 
-    constructor(scene: Phaser.Scene) {
+    constructor(private scene: Phaser.Scene) {
         this.container = scene.add.container(0, 0).setScrollFactor(0).setDepth(210);
 
         this.bg = scene.add.graphics();
         this.container.add(this.bg);
 
         this.titleText = scene.add.text(10, 8, t('leaderboardTitle'), {
-            fontSize: '13px',
+            fontFamily: ARCADE.font, fontSize: `${uiUnit(scene, 16)}px`,
             fontStyle: 'bold',
             color: '#00ffff'
         });
         this.container.add(this.titleText);
 
-        const rowStartY = 28;
-        const rowSpacing = 20;
+        const rowStartY = 35;
+        const rowSpacing = 25;
 
         for (let i = 0; i < 5; i++) {
             const y = rowStartY + i * rowSpacing;
@@ -41,22 +43,22 @@ export class LeaderboardPanel {
             // Crown icon for #1
             const crown = scene.textures.exists('crown_gold')
                 ? scene.add.image(14, y + 6, 'crown_gold').setScale(0.55).setVisible(false)
-                : scene.add.text(8, y, '👑', { fontSize: '11px' }).setVisible(false);
+                : scene.add.text(8, y, '👑', { fontFamily: ARCADE.font, fontSize: `${uiUnit(scene, 16)}px` }).setVisible(false);
 
             const rankText = scene.add.text(26, y, `${i + 1}`, {
-                fontSize: '12px',
+                fontFamily: ARCADE.font, fontSize: `${uiUnit(scene, 16)}px`,
                 fontStyle: 'bold',
                 color: '#aaaaaa'
             });
 
-            const nameText = scene.add.text(44, y, '---', {
-                fontSize: '12px',
+            const nameText = scene.add.text(46, y, '---', {
+                fontFamily: ARCADE.font, fontSize: `${uiUnit(scene, 16)}px`,
                 fontStyle: 'bold',
                 color: '#ffffff'
             });
 
             const valueText = scene.add.text(this.panelWidth - 12, y, '0', {
-                fontSize: '12px',
+                fontFamily: ARCADE.font, fontSize: `${uiUnit(scene, 16)}px`,
                 fontStyle: 'bold',
                 color: '#ffffff'
             }).setOrigin(1, 0);
@@ -71,7 +73,7 @@ export class LeaderboardPanel {
 
         // Extra player row
         this.playerExtraRow = scene.add.text(10, rowStartY + 5 * rowSpacing + 4, '', {
-            fontSize: '11px',
+            fontFamily: ARCADE.font, fontSize: `${uiUnit(scene, 16)}px`,
             fontStyle: 'bold',
             color: '#00ffff'
         }).setVisible(false);
@@ -101,17 +103,17 @@ export class LeaderboardPanel {
 
                 // Colors
                 if (isFirst) {
-                    rText.setColor('#ffd700');
-                    nText.setColor('#ffd700');
-                    vText.setColor('#ffd700');
+                    this.setTextColor(rText, '#ffd700');
+                    this.setTextColor(nText, '#ffd700');
+                    this.setTextColor(vText, '#ffd700');
                 } else if (isPlayer) {
-                    rText.setColor('#00ffff');
-                    nText.setColor('#00ffff');
-                    vText.setColor('#00ffff');
+                    this.setTextColor(rText, '#00ffff');
+                    this.setTextColor(nText, '#00ffff');
+                    this.setTextColor(vText, '#00ffff');
                 } else {
-                    rText.setColor('#aaaaaa');
-                    nText.setColor('#ffffff');
-                    vText.setColor('#ffffff');
+                    this.setTextColor(rText, '#aaaaaa');
+                    this.setTextColor(nText, '#ffffff');
+                    this.setTextColor(vText, '#ffffff');
                 }
             } else {
                 crown.setVisible(false);
@@ -123,55 +125,42 @@ export class LeaderboardPanel {
 
         // Check if player is outside top 5
         if (playerRank && playerRank.rank > 5) {
-            this.playerExtraRow.setText(`${t('you')}  #${playerRank.rank}  VALUE ${playerRank.value}`);
+            this.playerExtraRow.setText(`${t('you')} #${playerRank.rank} · ${playerRank.value}`);
             this.playerExtraRow.setVisible(true);
-            this.panelHeight = 162;
+            this.panelHeight = 194;
         } else {
             this.playerExtraRow.setVisible(false);
-            this.panelHeight = 138;
+            this.panelHeight = 170;
         }
 
         this.drawBackground();
     }
 
+    private setTextColor(text: Phaser.GameObjects.Text, color: string) {
+        if (text.style.color !== color) text.setColor(color);
+    }
+
     private drawBackground() {
         this.bg.clear();
-        this.bg.fillStyle(0x050d1a, 0.75);
+        this.bg.fillStyle(0x071321, 0.82);
         this.bg.fillRoundedRect(0, 0, this.panelWidth, this.panelHeight, 8);
-        this.bg.lineStyle(1.5, 0x005588, 0.8);
+        this.bg.lineStyle(1.5, 0x34516a, 0.8);
         this.bg.strokeRoundedRect(0, 0, this.panelWidth, this.panelHeight, 8);
     }
 
     public resize(gameSize: Phaser.Structs.Size) {
-        const w = gameSize.width;
+        const layout = arenaUiLayout(gameSize.width, gameSize.height, safeInsets(this.scene));
         this.titleText.setText(t('leaderboardTitle'));
-        // Narrow viewport adjustment
-        if (w <= 450) {
-            this.panelWidth = 156;
-            this.titleText.setFontSize('11px');
-            for (let i = 0; i < 5; i++) {
-                this.rankTexts[i].setFontSize('10px');
-                this.nameTexts[i].setFontSize('10px');
-                this.valueTexts[i].setFontSize('10px');
-                this.valueTexts[i].setX(this.panelWidth - 8);
-            }
-            this.playerExtraRow.setFontSize('10px');
-        } else {
-            this.panelWidth = 186;
-            this.titleText.setFontSize('13px');
-            for (let i = 0; i < 5; i++) {
-                this.rankTexts[i].setFontSize('12px');
-                this.nameTexts[i].setFontSize('12px');
-                this.valueTexts[i].setFontSize('12px');
-                this.valueTexts[i].setX(this.panelWidth - 10);
-            }
-            this.playerExtraRow.setFontSize('11px');
+        this.panelWidth = layout.ranking.width;
+        this.titleText.setFontSize(uiUnit(this.scene, 16));
+        for (let i = 0; i < 5; i++) {
+            this.rankTexts[i].setFontSize(uiUnit(this.scene, 16));
+            this.nameTexts[i].setFontSize(uiUnit(this.scene, 16));
+            this.valueTexts[i].setFontSize(uiUnit(this.scene, 16)).setX(this.panelWidth - 10);
+            this.nameTexts[i].setWordWrapWidth(this.panelWidth - 95);
         }
-
-        // Top-right corner (placed below top HUD on narrow screens to prevent overlap)
-        const posX = Math.max(10, w - this.panelWidth - 12);
-        const posY = w <= 450 ? 148 : 12;
-        this.container.setPosition(posX, posY);
+        this.playerExtraRow.setFontSize(uiUnit(this.scene, 16));
+        this.container.setPosition(layout.ranking.x, layout.ranking.y);
         this.drawBackground();
     }
 

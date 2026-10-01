@@ -3,6 +3,7 @@ import { PlayerSnake } from '../entities/PlayerSnake';
 import { NumberEnemy } from '../entities/NumberEnemy';
 import { NumberBoss } from '../entities/NumberBoss';
 import { ProgressionManager } from '../models/Progression';
+import { CosmeticsManager } from '../models/Cosmetics';
 import { getLevel, type LevelDefinition } from '../config/levels';
 import { VirtualJoystick } from '../ui/VirtualJoystick';
 import { HUD } from '../ui/HUD';
@@ -11,16 +12,22 @@ import { GameBalance } from '../config/gameBalance';
 import { isEdible, calculateDamage, calculateNewBodySegments } from '../utils/gameRules';
 import { DebugUI } from '../ui/DebugUI';
 import { MagnetAbility } from '../systems/MagnetAbility';
-import { CollectibleOrb } from '../entities/CollectibleOrb';
+import { CollectibleOrb, type OrbActivation } from '../entities/CollectibleOrb';
 import { LeaderboardPanel } from '../ui/LeaderboardPanel';
 import { BossIndicator } from '../ui/BossIndicator';
 import type { RectBounds } from '../utils/layout';
 import { getRankingResult, type ArenaParticipant, type RankingResult } from '../utils/ranking';
 import { normalizeStartValue } from '../utils/prepValues';
-import { t, isTraditionalChinese } from '../i18n';
+import { t } from '../i18n';
 import { UltimateBoss } from '../entities/UltimateBoss';
 import { LuckyWheelOverlay } from '../ui/LuckyWheelOverlay';
 import { type WheelReward, applyWheelReward } from '../utils/luckyWheel';
+import { BodyCollisionSystem, type BodyActor, type BodyPoint } from '../systems/BodyCollision';
+import { calculateBodyRecoil } from '../systems/Recoil';
+import { createSnakeOrbDrops } from '../systems/OrbRewards';
+import { EnemySkinSelector, VisualPreferencesManager } from '../models/VisualPreferences';
+import { createArenaBackground } from '../ui/ArenaBackground';
+import { ARCADE, arcadeButton, roundedPanel, uiText, uiUnit } from '../ui/ArcadeStyle';
 
 export class GameScene extends Phaser.Scene {
     player!: PlayerSnake;
@@ -34,7 +41,17 @@ export class GameScene extends Phaser.Scene {
     bossIndicator!: BossIndicator;
     orbs: CollectibleOrb[] = [];
     magnet!: MagnetAbility;
-    
+    bodyCollisions = new BodyCollisionSystem(GameBalance.bodyCollision);
+    private previousHeads = new Map<string, BodyPoint>();
+    private freeOrbs: CollectibleOrb[] = [];
+    private skinSelector = new EnemySkinSelector();
+    private particles = new Set<Phaser.GameObjects.Arc>();
+    private recoilEchoes = new Set<Phaser.GameObjects.Image>();
+    bodyRecoilCount = 0;
+    orbCollectedScore = 0;
+    orbCollectedEnergy = 0;
+    snakeDropCount = 0;
+
     joystick!: VirtualJoystick;
     hud!: HUD;
     audio!: AudioSystem;
@@ -71,10 +88,10 @@ export class GameScene extends Phaser.Scene {
 
     // Background grid
     grid!: Phaser.GameObjects.Grid;
-    
+
     // Spawn timer
     spawnTimer: number = 0;
-    
+
     gameStartTime: number = 0;
     lastRescueTime: number = 0;
     lastEdibleCheckTime: number = 0;
@@ -86,6 +103,7 @@ export class GameScene extends Phaser.Scene {
     init(data: any) {
         this.levelId = data?.levelId || 1;
         ProgressionManager.load();
+        CosmeticsManager.load();
         this.levelDef = getLevel(this.levelId);
         this.runStartValue = normalizeStartValue(data?.startValueOverride ?? this.levelDef.startValue);
     }
@@ -94,6 +112,15 @@ export class GameScene extends Phaser.Scene {
         this.gameState = 'RUNNING';
         this.enemies = [];
         this.orbs = [];
+        this.freeOrbs = [];
+        this.previousHeads.clear();
+        this.bodyCollisions.reset();
+        this.bodyRecoilCount = 0;
+        this.orbCollectedScore = 0;
+        this.orbCollectedEnergy = 0;
+        this.snakeDropCount = 0;
+        VisualPreferencesManager.load();
+        this.skinSelector = new EnemySkinSelector();
         this.boss = null;
         this.ultimateBoss = null;
         this.luckyWheelOverlay = null;
@@ -143,7 +170,7 @@ export class GameScene extends Phaser.Scene {
             loop: true
         });
         this.updateArenaRanking();
-        
+
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.get('e2e') === '1') {
             (window as any).__E2E_READONLY__ = {
@@ -183,7 +210,7 @@ export class GameScene extends Phaser.Scene {
                 getBoostEnergy: () => this.player.boostEnergy,
 
                 spawnEnemy: (val: number, x: number, y: number, skinStyle?: string) => {
-                    const e = new NumberEnemy(this, x, y, val, skinStyle);
+                    const e = new NumberEnemy(this, x, y, val, skinStyle ?? this.skinSelector.next());
                     this.enemies.push(e);
                     return e;
                 },
@@ -223,7 +250,7 @@ export class GameScene extends Phaser.Scene {
                     }
                 },
                 forceCollisionWithBoss: () => {
-                    this.player.isInvulnerable = false; 
+                    this.player.isInvulnerable = false;
                     if (this.ultimateBoss) this.handleUltimateBossCollision();
                     else if (this.boss) this.handleBossCollision();
                 },
@@ -281,12 +308,16 @@ export class GameScene extends Phaser.Scene {
                 setPlayerPositionForTest: (x: number, y: number) => {
                     if (this.player) {
                         this.player.teleport(x, y);
+                        this.previousHeads.delete('player');
                     }
                 },
                 forceWheelSpin: (rewardId?: string) => this.luckyWheelOverlay ? this.luckyWheelOverlay.spin(rewardId) : null,
                 getUltimateBoss: () => this.ultimateBoss,
                 spawnUltimateBossForTest: () => {
                     if (!this.ultimateBoss) {
+                        this.boss?.destroy();
+                        this.boss = null;
+                        this.bossSpawned = true;
                         this.ultimateBoss = new UltimateBoss(this, 0, -500);
                         this.isUltimatePhase = true;
                     }
@@ -297,7 +328,31 @@ export class GameScene extends Phaser.Scene {
                     if (this.ultimateBoss) this.handleUltimateBossCollision();
                 },
                 getWheelReward: () => this.wheelReward,
-                isUltimatePhaseActive: () => this.isUltimatePhase
+                isUltimatePhaseActive: () => this.isUltimatePhase,
+                getPlayerPath: () => this.player.getVisiblePath(),
+                getPlayerTargetLength: () => this.player.targetLength,
+                getBodyRecoilCount: () => this.bodyRecoilCount,
+                getPlayerRecoilState: () => ({ active: this.player.isRecoiling, remainingMs: this.player.recoilRemainingMs, velocity: { x: this.player.head.body!.velocity.x, y: this.player.head.body!.velocity.y } }),
+                getOrbRewardTotals: () => ({ score: this.orbCollectedScore, energy: this.orbCollectedEnergy, snakes: this.snakeDropCount }),
+                getOrbPoolSize: () => this.orbs.length + this.freeOrbs.length,
+                getBodyCandidateChecks: () => this.bodyCollisions.lastCandidateChecks,
+                getArenaTestSnapshot: () => ({
+                    time: this.time.now,
+                    player: { value: this.player.value, hp: this.player.hp, x: this.player.head.x, y: this.player.head.y, path: this.player.getVisiblePath(), targetLength: this.player.targetLength, isRecoiling: this.player.isRecoiling, velocity: { x: this.player.head.body!.velocity.x, y: this.player.head.body!.velocity.y } },
+                    enemies: this.enemies.map(enemy => ({ id: enemy.arenaId, value: enemy.value, x: enemy.body.x, y: enemy.body.y, path: enemy.getVisiblePath(), targetLength: enemy.targetLength, isRecoiling: enemy.isRecoiling, magnetSuppressed: this.magnet.isEnemySuppressed(enemy.arenaId), velocity: { x: enemy.body.body!.velocity.x, y: enemy.body.body!.velocity.y } })),
+                    orbs: this.orbs.map(orb => ({ x: orb.sprite.x, y: orb.sprite.y, canCollect: orb.canCollect, isTransforming: orb.isTransforming, reward: { ...orb.reward } })),
+                    score: this.hud.getScore(), boost: this.player.boostEnergy, recoils: this.bodyRecoilCount,
+                    orbRewards: { score: this.orbCollectedScore, energy: this.orbCollectedEnergy, snakes: this.snakeDropCount }
+                }),
+                seedPlayerPathForTest: (points: BodyPoint[]) => { this.player.seedPathForTest(points); this.previousHeads.delete('player'); },
+                seedEnemyPathForTest: (index: number, points: BodyPoint[]) => {
+                    const enemy = this.enemies[index];
+                    if (enemy) { enemy.seedPathForTest(points); this.previousHeads.delete(enemy.arenaId); }
+                },
+                setPlayerDirectionForTest: (angle: number) => { this.player.currentAngle = angle; this.player.targetAngle = angle; },
+                spawnOrbForTest: (x: number, y: number) => this.spawnOrb(x, y),
+                getPlayerScore: () => this.hud.getScore(),
+                setBoostEnergyForTest: (value: number) => { this.player.boostEnergy = Phaser.Math.Clamp(value, 0, 100); }
             };
         } else {
             // Ensure no debug API exists in normal mode
@@ -314,7 +369,8 @@ export class GameScene extends Phaser.Scene {
         // Visibility API pause
         document.addEventListener('visibilitychange', this.handleVisibilityChange);
 
-        this.events.on('shutdown', this.teardown, this);
+        this.events.once('shutdown', this.teardown, this);
+        this.events.on('postupdate', this.syncMotionTrails, this);
 
         // Initial spawn
         for (let i = 0; i < 6; i++) {
@@ -323,92 +379,14 @@ export class GameScene extends Phaser.Scene {
             const sx = Phaser.Math.Clamp(Math.cos(angle) * dist, -ww/2+50, ww/2-50);
             const sy = Phaser.Math.Clamp(Math.sin(angle) * dist, -wh/2+50, wh/2-50);
             const val = Phaser.Math.Between(1, 4);
-            const enemy = new NumberEnemy(this, sx, sy, val);
+            const enemy = new NumberEnemy(this, sx, sy, val, this.skinSelector.next());
             this.enemies.push(enemy);
         }
         for (let i = 0; i < 14; i++) this.spawnEnemy();
     }
 
     createBackgroundTheme() {
-        const ww = GameBalance.world.width;
-        const wh = GameBalance.world.height;
-        const theme = this.levelDef.theme || 'neon-grid';
-
-        const bgGraphics = this.add.graphics();
-        bgGraphics.setDepth(-12);
-
-        let gridFill = 0x000000;
-        let gridLine = 0x333333;
-        let gridAlpha = 0.2;
-        let boundaryColor = 0x00ffff;
-
-        if (theme === 'neon-grid') {
-            // L1: Neon Grid - dark blue, cyan grid
-            bgGraphics.fillStyle(0x060c1a, 1);
-            bgGraphics.fillRect(-ww/2, -wh/2, ww, wh);
-            gridLine = 0x00ffff;
-            gridAlpha = 0.15;
-            boundaryColor = 0x00ffff;
-        } else if (theme === 'cyber-city') {
-            // L2: Cyber City - dark navy/purple, magenta/purple lines
-            bgGraphics.fillStyle(0x0e0c24, 1);
-            bgGraphics.fillRect(-ww/2, -wh/2, ww, wh);
-            gridLine = 0xcc00ff;
-            gridAlpha = 0.15;
-            boundaryColor = 0xff00cc;
-            // Distant geometric city lines
-            bgGraphics.lineStyle(1.5, 0x8800bb, 0.12);
-            for (let x = -ww/2 + 200; x < ww/2; x += 300) {
-                const h = 200 + ((Math.abs(x) * 7) % 300);
-                bgGraphics.strokeRect(x, wh/2 - h, 140, h);
-            }
-        } else if (theme === 'lava-core') {
-            // L3: Lava Core - dark charcoal, red/orange energy cracks
-            bgGraphics.fillStyle(0x180b0b, 1);
-            bgGraphics.fillRect(-ww/2, -wh/2, ww, wh);
-            gridLine = 0xff3300;
-            gridAlpha = 0.18;
-            boundaryColor = 0xff5500;
-            // Lava cracks
-            bgGraphics.lineStyle(2, 0xff6600, 0.15);
-            for (let i = 0; i < 20; i++) {
-                const cx = -ww/2 + 100 + (i * 115) % (ww - 200);
-                const cy = -wh/2 + 100 + (i * 97) % (wh - 200);
-                bgGraphics.beginPath();
-                bgGraphics.moveTo(cx, cy);
-                bgGraphics.lineTo(cx + 40, cy + 25);
-                bgGraphics.lineTo(cx + 70, cy + 10);
-                bgGraphics.strokePath();
-            }
-        } else if (theme === 'deep-space') {
-            // L4: Deep Space - black/deep purple, stars & cosmic rings
-            bgGraphics.fillStyle(0x050310, 1);
-            bgGraphics.fillRect(-ww/2, -wh/2, ww, wh);
-            gridLine = 0x443377;
-            gridAlpha = 0.12;
-            boundaryColor = 0x9955ff;
-            // Stars
-            bgGraphics.fillStyle(0xffffff, 0.4);
-            for (let i = 0; i < 60; i++) {
-                const sx = -ww/2 + ((i * 137) % ww);
-                const sy = -wh/2 + ((i * 241) % wh);
-                const r = (i % 3 === 0) ? 2 : 1;
-                bgGraphics.fillCircle(sx, sy, r);
-            }
-            // Cosmic ring
-            bgGraphics.lineStyle(2, 0x9955ff, 0.1);
-            bgGraphics.strokeCircle(0, 0, 450);
-            bgGraphics.strokeCircle(0, 0, 750);
-        }
-
-        this.grid = this.add.grid(0, 0, ww, wh, 100, 100, gridFill, 0, gridLine, gridAlpha);
-        this.grid.setDepth(-11);
-
-        // Visual Boundary
-        const boundary = this.add.graphics();
-        boundary.lineStyle(10, boundaryColor, 0.35);
-        boundary.strokeRect(-ww/2, -wh/2, ww, wh);
-        boundary.setDepth(-10);
+        createArenaBackground(this, this.levelDef.theme, GameBalance.world.width, GameBalance.world.height);
     }
 
     activateMagnet() {
@@ -417,7 +395,7 @@ export class GameScene extends Phaser.Scene {
 
     clearOrbs() {
         for (const orb of this.orbs) {
-            orb.destroy();
+            this.recycleOrb(orb);
         }
         this.orbs = [];
     }
@@ -460,6 +438,12 @@ export class GameScene extends Phaser.Scene {
             e.update(dt, this.player.head.x, this.player.head.y, this.player.value);
         }
 
+        if (time - this.lastEatTime > GameBalance.combo.window) this.comboCount = 0;
+        const headResolved = this.resolveEnemyHeadContacts(time);
+        this.updateBossLogic(dt);
+        if (this.gameState !== 'RUNNING') return;
+        this.resolveBodyContacts(time, headResolved);
+
         // Magnet desktop trigger & update (Applied AFTER normal AI velocity so magnetic pull survives)
         if (Phaser.Input.Keyboard.JustDown(this.keys.m)) {
             this.activateMagnet();
@@ -471,31 +455,30 @@ export class GameScene extends Phaser.Scene {
             const orb = this.orbs[i];
             orb.update(time, dt);
             if (orb.isExpired(time)) {
-                orb.destroy();
+                this.recycleOrb(orb);
                 this.orbs.splice(i, 1);
                 continue;
             }
             // Head overlap collects orb
-            const dist = Phaser.Math.Distance.Between(this.player.head.x, this.player.head.y, orb.sprite.x, orb.sprite.y);
-            if (dist < 32) {
+            const orbPosition = orb.getCollectionPosition();
+            const dist = Phaser.Math.Distance.Between(this.player.head.x, this.player.head.y, orbPosition.x, orbPosition.y);
+            if (dist < 32 && orb.canCollect) {
                 const ox = orb.sprite.x;
                 const oy = orb.sprite.y;
-                orb.destroy();
+                const reward = orb.collect();
+                if (!reward) continue;
                 this.orbs.splice(i, 1);
-                this.hud.addScore(GameBalance.orb.scoreReward);
-                this.player.boostEnergy = Math.min(GameBalance.player.maxBoostEnergy, this.player.boostEnergy + GameBalance.orb.boostReward);
+                this.recycleOrb(orb);
+                this.hud.addScore(reward.score);
+                this.orbCollectedScore += reward.score;
+                this.orbCollectedEnergy += reward.energy;
+                this.player.boostEnergy = Math.min(GameBalance.player.maxBoostEnergy, this.player.boostEnergy + reward.energy);
                 this.createParticles(ox, oy, 0xffff00, 6);
             }
         }
 
-        // Dynamic Camera Zoom
-        const targetZoom = 1 - (this.player.segments * 0.002);
-        const clampedZoom = Phaser.Math.Clamp(targetZoom, 0.7, 1);
-        this.cameras.main.setZoom(Phaser.Math.Linear(this.cameras.main.zoom, clampedZoom, 0.05));
-
-        if (time - this.lastEatTime > GameBalance.combo.window) {
-            this.comboCount = 0;
-        }
+        // Keep the head readable; longer tails may naturally leave the camera view.
+        this.cameras.main.setZoom(1);
 
         if (!this.isUltimatePhase) {
             // Assist: Early Game Rescue
@@ -521,17 +504,53 @@ export class GameScene extends Phaser.Scene {
                         }
                     }
                 });
-                if (edibleCount < 4 && this.enemies.length < GameBalance.enemy.normalMaxLimit + 2) {
+                if (edibleCount < 4 && this.enemies.length < GameBalance.enemy.normalMaxLimit) {
                     this.spawnEnemy(true);
                 }
             }
         }
 
-        // Enemy Collision & Eat Assist
+        // Spawning
+        if (this.isUltimatePhase) {
+            this.spawnTimer -= dt;
+            if (this.spawnTimer <= 0 && this.enemies.length < 16) {
+                this.spawnFinalEcosystemEnemy();
+                this.spawnTimer = 400;
+            }
+        } else {
+            this.spawnTimer -= dt;
+            if (this.spawnTimer <= 0 && this.enemies.length < GameBalance.enemy.normalMaxLimit) {
+                this.spawnEnemy();
+                this.spawnTimer = 500;
+            }
+        }
+
+        if (this.debugUI?.text.visible) {
+            this.debugUI.update();
+        }
+
+        this.hud.update(
+            this.player.hp,
+            ProgressionManager.getMaxHP(),
+            this.player.boostEnergy,
+            GameBalance.player.maxBoostEnergy,
+            this.magnet.getHUDText(),
+            this.magnet.state
+        );
+        this.hud.setValue(this.player.value);
+
+        if (this.worldCrown && this.worldCrown.visible && this.gameState === 'RUNNING') {
+            this.followLeaderHead();
+        }
+    }
+
+    private resolveEnemyHeadContacts(time: number): Set<string> {
+        const headResolved = new Set<string>();
         for (let i = this.enemies.length - 1; i >= 0; i--) {
             const e = this.enemies[i];
+            if (!e.body.active) continue;
             let isHit = this.physics.overlap(this.player.head, e.body);
-            
+
             // Eat Assist
             if (!isHit && e.value < this.player.value) {
                 const dist = Phaser.Math.Distance.Between(this.player.head.x, this.player.head.y, e.body.x, e.body.y);
@@ -544,13 +563,19 @@ export class GameScene extends Phaser.Scene {
                     }
                 }
             }
-            
+
             if (isHit) {
+                headResolved.add(e.arenaId);
                 this.handleEnemyCollision(e, i, time);
+                if (this.gameState !== 'RUNNING') break;
             }
         }
 
-        // Boss Logic
+        return headResolved;
+    }
+
+    private updateBossLogic(dt: number) {
+        if (this.gameState !== 'RUNNING') return;
         if (!this.isUltimatePhase && this.player.value >= this.levelDef.bossTriggerValue && !this.bossSpawned) {
             this.spawnBoss();
         }
@@ -575,37 +600,55 @@ export class GameScene extends Phaser.Scene {
             this.bossIndicator.hide();
         }
 
-        // Spawning
-        if (this.isUltimatePhase) {
-            this.spawnTimer -= dt;
-            if (this.spawnTimer <= 0 && this.enemies.length < 16) {
-                this.spawnFinalEcosystemEnemy();
-                this.spawnTimer = 400;
-            }
-        } else {
-            this.spawnTimer -= dt;
-            if (this.spawnTimer <= 0 && this.enemies.length < GameBalance.enemy.normalMaxLimit) {
-                this.spawnEnemy();
-                this.spawnTimer = 500;
-            }
-        }
-        
-        if (this.debugUI) {
-            this.debugUI.update();
-        }
+    }
 
-        this.hud.update(
-            this.player.hp,
-            ProgressionManager.getMaxHP(),
-            this.player.boostEnergy,
-            GameBalance.player.maxBoostEnergy,
-            this.magnet.getHUDText(),
-            this.magnet.state
-        );
-
-        if (this.worldCrown && this.worldCrown.visible && this.gameState === 'RUNNING') {
-            this.followLeaderHead();
+    private resolveBodyContacts(time: number, headResolved: Set<string>) {
+        const playerPoint = { x: this.player.head.x, y: this.player.head.y };
+        const playerPath = this.player.getVisiblePath();
+        const actors: BodyActor[] = [{ id: 'player', kind: 'player', head: playerPoint,
+            previousHead: playerPath.length > 1 ? this.previousHeads.get('player') ?? playerPoint : playerPoint,
+            headRadius: 20, path: playerPath, active: this.player.head.active }];
+        for (const enemy of this.enemies) {
+            const point = { x: enemy.body.x, y: enemy.body.y };
+            actors.push({ id: enemy.arenaId, kind: 'enemy', head: point,
+                previousHead: this.previousHeads.get(enemy.arenaId) ?? point,
+                headRadius: 18, path: enemy.getVisiblePath(), active: enemy.body.active });
         }
+        const hw = GameBalance.world.width / 2, hh = GameBalance.world.height / 2;
+        for (const contact of this.bodyCollisions.detect(actors, time, headResolved)) {
+            const snake = contact.actorId === 'player' ? this.player : this.enemies.find(enemy => enemy.arenaId === contact.actorId);
+            if (!snake) continue;
+            const head = snake instanceof PlayerSnake ? snake.head : snake.body;
+            const recoil = calculateBodyRecoil(head, contact,
+                { minX: -hw + 40, minY: -hh + 40, maxX: hw - 40, maxY: hh - 40 },
+                GameBalance.bodyCollision.separationPx, GameBalance.bodyCollision.maxImpulsePx);
+            snake.separateFromBody(recoil.displacement.x, recoil.displacement.y);
+            snake.applyRecoil(recoil.direction, GameBalance.bodyCollision.recoilSpeed, GameBalance.bodyCollision.recoilDurationMs);
+            const enemyId = contact.actorId === 'player' ? contact.ownerId : contact.actorId;
+            this.magnet.suppressEnemyForRecoil(enemyId, time + GameBalance.bodyCollision.detectionCooldownMs);
+            this.bodyRecoilCount++;
+            this.createParticles(contact.contact.x, contact.contact.y, 0xb8e7ff, 4);
+            this.audio.playBounceSFX();
+            if (!VisualPreferencesManager.get().reducedMotion) {
+                // Squash a bounded visual copy; the Arcade collider stays the same in every mode.
+                if (this.recoilEchoes.size < (VisualPreferencesManager.get().lowEffects ? 8 : 24)) {
+                    const echo = this.add.image(head.x, head.y, head.texture.key).setDepth(head.depth + 1).setAlpha(0.6);
+                    this.recoilEchoes.add(echo);
+                    this.tweens.add({ targets: echo, scaleX: 0.87, scaleY: 1.08, alpha: 0, duration: 150,
+                        onComplete: () => { this.recoilEchoes.delete(echo); echo.destroy(); } });
+                }
+            }
+        }
+        this.previousHeads.clear();
+        this.previousHeads.set('player', { x: this.player.head.x, y: this.player.head.y });
+        for (const enemy of this.enemies) if (enemy.body.active) this.previousHeads.set(enemy.arenaId, { x: enemy.body.x, y: enemy.body.y });
+    }
+
+    private syncMotionTrails() {
+        if (this.gameState !== 'RUNNING') return;
+        this.player?.syncMotionTrail();
+        for (const enemy of this.enemies) if (enemy.body.active) enemy.syncMotionTrail();
+        this.ultimateBoss?.syncVisualPosition();
     }
 
     updateArenaRanking() {
@@ -664,14 +707,13 @@ export class GameScene extends Phaser.Scene {
             const newLeaderId = result.leader.id;
             if (this.currentLeaderId !== newLeaderId) {
                 this.currentLeaderId = newLeaderId;
-                this.tweens.add({
-                    targets: this.worldCrown,
-                    scale: { from: 1.4, to: 1.0 },
-                    duration: 250
-                });
+                const preference = VisualPreferencesManager.get();
+                if (!preference.reducedMotion && !preference.lowEffects) {
+                    this.tweens.add({ targets: this.worldCrown, scale: { from: 1.4, to: 1.0 }, duration: 250 });
+                }
             }
             this.followLeaderHead();
-            this.worldCrown.setVisible(true);
+            this.worldCrown.setVisible(this.gameState === 'RUNNING');
         } else {
             this.currentLeaderId = null;
             this.worldCrown.setVisible(false);
@@ -687,7 +729,7 @@ export class GameScene extends Phaser.Scene {
         const leader = this.currentRanking.leader;
         if (leader.type === 'player') {
             if (this.player?.head?.active) {
-                this.worldCrown.setPosition(this.player.head.x, this.player.head.y - 38);
+                this.worldCrown.setPosition(this.player.head.x, this.player.head.y - 80);
                 this.worldCrown.setVisible(true);
             } else {
                 this.worldCrown.setVisible(false);
@@ -705,7 +747,7 @@ export class GameScene extends Phaser.Scene {
         } else if (leader.type === 'enemy') {
             const e = this.enemies.find(en => en.arenaId === leader.id);
             if (e && e.body && e.body.active) {
-                this.worldCrown.setPosition(e.body.x, e.body.y - 38);
+                this.worldCrown.setPosition(e.body.x, e.body.y - 80);
                 this.worldCrown.setVisible(true);
             } else {
                 this.worldCrown.setVisible(false);
@@ -717,7 +759,7 @@ export class GameScene extends Phaser.Scene {
         this.gameState = 'RUNNING';
         this.player.value = this.runStartValue;
         this.player.hp = ProgressionManager.getMaxHP();
-        this.player.segments = 5;
+        this.player.resetSteering();
         this.player.boostEnergy = 100;
         this.comboCount = 0;
         this.player.isInvulnerable = false;
@@ -727,6 +769,8 @@ export class GameScene extends Phaser.Scene {
         this.enemies = [];
         this.clearOrbs();
         this.magnet.reset();
+        this.bodyCollisions.reset();
+        this.previousHeads.clear();
         if (this.boss) { this.boss.destroy(); this.boss = null; this.bossSpawned = false; }
         if (this.ultimateBoss) { this.ultimateBoss.destroy(); this.ultimateBoss = null; }
         if (this.luckyWheelOverlay) { this.luckyWheelOverlay.destroy(); this.luckyWheelOverlay = null; }
@@ -754,9 +798,12 @@ export class GameScene extends Phaser.Scene {
         this.lastRescueTime = 999999999;
         for (const e of this.enemies) { e.destroy(); }
         this.enemies = [];
+        this.bodyCollisions.reset();
+        this.previousHeads.clear();
     }
 
     spawnEnemy(isRescue = false) {
+        if (this.enemies.length >= GameBalance.enemy.normalMaxLimit) return;
         const pVal = this.player.value;
         const now = this.time.now;
         const gameTime = now - this.gameStartTime;
@@ -794,7 +841,7 @@ export class GameScene extends Phaser.Scene {
         let range = { min: GameBalance.enemy.spawnRanges.edible.min, max: GameBalance.enemy.spawnRanges.edible.max };
         if (role === 'hunter') range = GameBalance.enemy.spawnRanges.hunter;
         else if (role === 'giant') range = GameBalance.enemy.spawnRanges.giant;
-        
+
         if (isRescue) {
             range = { min: GameBalance.assist.earlyGameRescueDistMin, max: GameBalance.assist.earlyGameRescueDistMax };
         }
@@ -805,16 +852,16 @@ export class GameScene extends Phaser.Scene {
         const SPAWN_EDGE_MARGIN = 140;
         const hw = GameBalance.world.width / 2;
         const hh = GameBalance.world.height / 2;
-        
+
         while (!validSpawn && attempts < 20) {
             let angle = Math.random() * Math.PI * 2;
             let dist = range.min + Math.random() * (range.max - range.min);
-            
+
             if (isRescue) {
                 const vAngle = Math.atan2(this.player.head.body ? (this.player.head.body as Phaser.Physics.Arcade.Body).velocity.y : 0, this.player.head.body ? (this.player.head.body as Phaser.Physics.Arcade.Body).velocity.x : 0);
                 let bestAngle = angle;
                 let bestMargin = -9999;
-                
+
                 for (let i = 0; i < 3; i++) {
                     const testAngle = vAngle + (Math.random() * 1.5 - 0.75);
                     const tx = this.player.head.x + Math.cos(testAngle) * dist;
@@ -827,10 +874,10 @@ export class GameScene extends Phaser.Scene {
                 }
                 angle = bestAngle;
             }
-            
+
             sx = this.player.head.x + Math.cos(angle) * dist;
             sy = this.player.head.y + Math.sin(angle) * dist;
-            
+
             if (sx >= -hw + SPAWN_EDGE_MARGIN && sx <= hw - SPAWN_EDGE_MARGIN &&
                 sy >= -hh + SPAWN_EDGE_MARGIN && sy <= hh - SPAWN_EDGE_MARGIN) {
                 const actualDist = Phaser.Math.Distance.Between(this.player.head.x, this.player.head.y, sx, sy);
@@ -849,24 +896,31 @@ export class GameScene extends Phaser.Scene {
             sy = Phaser.Math.Clamp(sy, -hh + SPAWN_EDGE_MARGIN, hh - SPAWN_EDGE_MARGIN);
         }
 
-        const enemy = new NumberEnemy(this, sx, sy, val);
+        const enemy = new NumberEnemy(this, sx, sy, val, this.skinSelector.next());
         this.enemies.push(enemy);
         return enemy;
     }
 
-    spawnOrb(x: number, y: number): CollectibleOrb {
+    spawnOrb(x: number, y: number, activation: OrbActivation = {}): CollectibleOrb {
         if (this.orbs.length >= GameBalance.orb.maxActive) {
             const oldest = this.orbs.shift();
-            oldest?.destroy();
+            if (oldest) this.recycleOrb(oldest);
         }
-        const orb = new CollectibleOrb(this, x, y);
-        this.orbs.push(orb);
-        return orb;
+        const orb = this.freeOrbs.pop();
+        if (orb) orb.activate(x, y, activation);
+        const activated = orb ?? new CollectibleOrb(this, x, y, activation);
+        this.orbs.push(activated);
+        return activated;
+    }
+
+    private recycleOrb(orb: CollectibleOrb) {
+        orb.deactivate();
+        if (!this.freeOrbs.includes(orb)) this.freeOrbs.push(orb);
     }
 
     spawnBoss() {
         this.bossSpawned = true;
-        
+
         let sx = 0, sy = 0;
         let validSpawn = false;
         let attempts = 0;
@@ -874,19 +928,19 @@ export class GameScene extends Phaser.Scene {
         const hw = GameBalance.world.width / 2;
         const hh = GameBalance.world.height / 2;
         const dist = 1000;
-        
+
         while (!validSpawn && attempts < 20) {
             let angle = Math.random() * Math.PI * 2;
             sx = this.player.head.x + Math.cos(angle) * dist;
             sy = this.player.head.y + Math.sin(angle) * dist;
-            
+
             if (sx >= -hw + SPAWN_EDGE_MARGIN && sx <= hw - SPAWN_EDGE_MARGIN &&
                 sy >= -hh + SPAWN_EDGE_MARGIN && sy <= hh - SPAWN_EDGE_MARGIN) {
                 validSpawn = true;
             }
             attempts++;
         }
-        
+
         if (!validSpawn) {
             const angleToCenter = Math.atan2(-this.player.head.y, -this.player.head.x);
             sx = this.player.head.x + Math.cos(angleToCenter) * dist;
@@ -897,12 +951,12 @@ export class GameScene extends Phaser.Scene {
 
         this.boss = new NumberBoss(this, sx, sy, this.levelDef.bossValue);
         this.audio.playBossAlert();
-        
+
         const alertText = t('bossAppeared', { value: this.levelDef.bossValue }) || `${this.levelDef.bossValue} APPEARED!`;
         const alert = this.add.text(this.player.head.x, this.player.head.y - 100, alertText, {
             fontSize: '48px', fontStyle: 'bold', color: '#ff0000', stroke: '#000000', strokeThickness: 3
         }).setOrigin(0.5).setDepth(200);
-        
+
         this.tweens.add({
             targets: alert, y: alert.y - 50, alpha: 0, duration: 2000,
             onComplete: () => alert.destroy()
@@ -910,7 +964,15 @@ export class GameScene extends Phaser.Scene {
     }
 
     handleEnemyCollision(e: NumberEnemy, index: number, time: number) {
+        if (!e.body?.active || !this.enemies.includes(e)) return;
         if (isEdible(this.player.value, e.value)) {
+            // Freeze valid geometry before removing AI/physics; generic destroy never drops.
+            const visiblePath = e.getVisiblePath().map(point => ({ ...point }));
+            const drops = createSnakeOrbDrops(visiblePath, {
+                maxDrops: GameBalance.orb.maxActive, spacing: GameBalance.snake.sampleSpacing,
+                minMs: GameBalance.orb.chainTransformMinMs, maxMs: GameBalance.orb.chainTransformMaxMs,
+                score: GameBalance.orb.rewardScorePerSnake, energy: GameBalance.orb.rewardEnergyPerSnake
+            });
             // EAT
             this.player.eat(e.value);
             this.comboCount++;
@@ -919,11 +981,21 @@ export class GameScene extends Phaser.Scene {
             this.audio.playEatSFX(this.comboCount);
 
             this.createParticles(e.body.x, e.body.y, 0x00ff00);
-            
-            // Spawn body orbs from former body positions
-            const dropPositions = e.getDropPositions();
-            for (const pos of dropPositions) {
-                this.spawnOrb(pos.x, pos.y);
+
+            this.snakeDropCount++;
+            e.destroy();
+            this.bodyCollisions.forget(e.arenaId);
+            this.previousHeads.delete(e.arenaId);
+            this.magnet.forgetEnemy(e.arenaId);
+            // Index can change while multiple head contacts resolve in the same frame.
+            const actualIndex = this.enemies.indexOf(e);
+            this.enemies.splice(actualIndex === index ? index : actualIndex, 1);
+            for (const drop of drops) {
+                this.spawnOrb(drop.position.x, drop.position.y, {
+                    reward: drop.reward, transformDelay: drop.transformDelay,
+                    transformDuration: drop.transformDuration, unlockDelay: drop.unlockDelay,
+                    sourceTexture: 'enemy_body'
+                });
             }
 
             const oldVal = this.player.value - e.value;
@@ -936,10 +1008,8 @@ export class GameScene extends Phaser.Scene {
                 this.audio.playBossReversal();
             }
 
-            e.destroy();
-            this.enemies.splice(index, 1);
-            this.cameras.main.shake(100, 0.002);
-            
+            if (!VisualPreferencesManager.get().reducedMotion) this.cameras.main.shake(100, 0.002);
+
         } else if (!this.player.isInvulnerable) {
             // DAMAGE
             const dmg = calculateDamage(this.player.value, e.value);
@@ -952,7 +1022,7 @@ export class GameScene extends Phaser.Scene {
                 const newSeg = calculateNewBodySegments(this.player.segments, dmg.hpLoss);
                 const angle = Math.atan2(this.player.head.y - e.body.y, this.player.head.x - e.body.x);
                 this.player.takeDamage(dmg.hpLoss, newSeg, new Phaser.Math.Vector2(Math.cos(angle), Math.sin(angle)));
-                this.cameras.main.shake(200, 0.01);
+                if (!VisualPreferencesManager.get().reducedMotion) this.cameras.main.shake(160, 0.006);
                 this.audio.playHitSFX();
                 if (this.player.hp <= 0) {
                     this.gameState = 'GAME_OVER';
@@ -992,7 +1062,7 @@ export class GameScene extends Phaser.Scene {
                 const newSeg = calculateNewBodySegments(this.player.segments, dmg.hpLoss);
                 const angle = Math.atan2(this.player.head.y - this.boss.body.y, this.player.head.x - this.boss.body.x);
                 this.player.takeDamage(dmg.hpLoss, newSeg, new Phaser.Math.Vector2(Math.cos(angle), Math.sin(angle)));
-                this.cameras.main.shake(200, 0.01);
+                if (!VisualPreferencesManager.get().reducedMotion) this.cameras.main.shake(160, 0.006);
                 this.audio.playHitSFX();
                 if (this.player.hp <= 0) {
                     this.gameState = 'GAME_OVER';
@@ -1044,6 +1114,9 @@ export class GameScene extends Phaser.Scene {
         // Clear previous enemies and orbs
         for (const e of this.enemies) { e.destroy(); }
         this.enemies = [];
+        this.bodyCollisions.reset();
+        this.previousHeads.clear();
+        this.magnet.clearContactSuppression();
         this.clearOrbs();
 
         // Teleport player near center
@@ -1056,7 +1129,7 @@ export class GameScene extends Phaser.Scene {
             const dist = 350 + (i % 3) * 80;
             const sx = Math.cos(angle) * dist;
             const sy = Math.sin(angle) * dist;
-            const enemy = new NumberEnemy(this, sx, sy, val);
+            const enemy = new NumberEnemy(this, sx, sy, val, this.skinSelector.next());
             this.enemies.push(enemy);
         }
 
@@ -1090,7 +1163,7 @@ export class GameScene extends Phaser.Scene {
         sx = Phaser.Math.Clamp(sx, -hw + SPAWN_EDGE_MARGIN, hw - SPAWN_EDGE_MARGIN);
         sy = Phaser.Math.Clamp(sy, -hh + SPAWN_EDGE_MARGIN, hh - SPAWN_EDGE_MARGIN);
         const val = Phaser.Math.Between(10, 90);
-        const enemy = new NumberEnemy(this, sx, sy, val);
+        const enemy = new NumberEnemy(this, sx, sy, val, this.skinSelector.next());
         this.enemies.push(enemy);
         return enemy;
     }
@@ -1120,7 +1193,7 @@ export class GameScene extends Phaser.Scene {
                 const newSeg = calculateNewBodySegments(this.player.segments, dmg.hpLoss);
                 const angle = Math.atan2(this.player.head.y - this.ultimateBoss.body.y, this.player.head.x - this.ultimateBoss.body.x);
                 this.player.takeDamage(dmg.hpLoss, newSeg, new Phaser.Math.Vector2(Math.cos(angle), Math.sin(angle)));
-                this.cameras.main.shake(200, 0.01);
+                if (!VisualPreferencesManager.get().reducedMotion) this.cameras.main.shake(160, 0.006);
                 this.audio.playHitSFX();
                 if (this.player.hp <= 0) {
                     this.gameState = 'GAME_OVER';
@@ -1136,7 +1209,7 @@ export class GameScene extends Phaser.Scene {
         const t = this.add.text(this.player.head.x, this.player.head.y - 80, text, {
             fontSize: '32px', fontStyle: 'bold', color: '#00ffff'
         }).setOrigin(0.5).setDepth(200);
-        
+
         this.tweens.add({
             targets: t, y: t.y - 40, alpha: 0, duration: 1500,
             onComplete: () => t.destroy()
@@ -1144,22 +1217,29 @@ export class GameScene extends Phaser.Scene {
     }
 
     createParticles(x: number, y: number, color: number, count = 20) {
-        for (let i = 0; i < count; i++) {
+        const preference = VisualPreferencesManager.get();
+        const limit = preference.lowEffects || preference.reducedMotion ? 32 : 96;
+        const visibleCount = Math.min(preference.reducedMotion ? Math.min(2, count) : preference.lowEffects ? Math.min(4, count) : count, limit - this.particles.size);
+        for (let i = 0; i < visibleCount; i++) {
             const p = this.add.circle(x, y, 4, color).setDepth(150);
+            this.particles.add(p);
             const angle = Math.random() * Math.PI * 2;
             const speed = 50 + Math.random() * 150;
-            this.physics.add.existing(p);
-            (p.body as Phaser.Physics.Arcade.Body).setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
-            
+            if (!preference.reducedMotion) {
+                this.physics.add.existing(p);
+                (p.body as Phaser.Physics.Arcade.Body).setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
+            }
+
             this.tweens.add({
                 targets: p, alpha: 0, scale: 0.1, duration: 600,
-                onComplete: () => p.destroy()
+                onComplete: () => { this.particles.delete(p); p.destroy(); }
             });
         }
     }
 
     levelClear() {
         this.gameState = 'LEVEL_CLEAR';
+        this.updateArenaRanking();
         if (this.cameras && this.cameras.main) this.cameras.main.stopFollow();
         if (this.player && this.player.head && (this.player.head as any).body) this.player.head.setVelocity(0, 0);
         if (this.bossIndicator) this.bossIndicator.hide();
@@ -1183,126 +1263,51 @@ export class GameScene extends Phaser.Scene {
     }
 
     showLevelClearScreen(newlyClaimedReward: boolean, newlyUnlocked: boolean) {
-        if (this.worldCrown) this.worldCrown.setVisible(false);
-
-        const cx = this.cameras.main.scrollX + this.scale.width / 2;
-        const cy = this.cameras.main.scrollY + this.scale.height / 2;
-
-        const bg = this.add.graphics();
-        bg.fillStyle(0x000000, 0.85);
-        bg.fillRect(this.cameras.main.scrollX, this.cameras.main.scrollY, this.scale.width, this.scale.height);
-        bg.setDepth(300);
-
-        this.add.text(cx, cy - 140, t('levelClearTitle', { name: this.levelDef.name }), { fontSize: '56px', fontStyle: 'bold', color: '#00ff00' }).setOrigin(0.5).setDepth(301);
-        
-        let currentY = cy - 40;
-
-        const scoreVal = this.hud.getScore();
-        const bestVal = ProgressionManager.getBestScore(this.levelId);
-        this.add.text(cx, currentY - 30, `${t('score')}: ${scoreVal}    ${t('best')}: ${bestVal}`, {
-            fontSize: '22px', fontStyle: 'bold', color: '#ffffff'
-        }).setOrigin(0.5).setDepth(301);
-
-        if (this.isNewBest) {
-            this.add.text(cx, currentY - 5, t('newBest'), {
-                fontSize: '20px', fontStyle: 'bold', color: '#ffd700'
-            }).setOrigin(0.5).setDepth(301);
+        this.worldCrown?.setVisible(false);
+        this.cameras.main.stopFollow();
+        this.cameras.main.setZoom(1);
+        const w = this.scale.width, h = this.scale.height, cx = w / 2, cy = h / 2;
+        const panelH = Math.min(h - 28, uiUnit(this, 520));
+        this.createEndPanel(cx, cy, Math.min(w - 28, uiUnit(this, 560)), panelH);
+        const top = cy - panelH / 2;
+        const title = uiText(this, cx, top + 38, t('levelClearTitle', { name: t(`level_${this.levelId}`) }), Math.min(26, w / uiUnit(this, 1) * 0.06), '#81efdc');
+        title.setWordWrapWidth(w - 48).setDepth(302).setScrollFactor(0);
+        uiText(this, cx, top + 83, `${t('score')}: ${this.hud.getScore()}    ${t('best')}: ${ProgressionManager.getBestScore(this.levelId)}`, 18).setDepth(302).setScrollFactor(0);
+        if (this.isNewBest) uiText(this, cx, top + 112, t('newBest'), 16, '#ffe198').setDepth(302).setScrollFactor(0);
+        let message = '';
+        if (!this.levelDef.nextLevelId) message = `${t('allLevelsCleared')} · ${t('masterTitle')}`;
+        else {
+            if (newlyClaimedReward) message = `${t('levelRewardHeart')} · ${t('heartsTransition', { old: ProgressionManager.getMaxHP() - this.levelDef.reward!.value, new: ProgressionManager.getMaxHP() })}`;
+            if (newlyUnlocked) message += `${message ? '\n' : ''}${t('levelUnlocked', { next: this.levelDef.nextLevelId })}`;
         }
-        
-        if (!this.levelDef.nextLevelId) {
-            this.add.text(cx, currentY + 25, t('allLevelsCleared'), { fontSize: '36px', fontStyle: 'bold', color: '#ffff00' }).setOrigin(0.5).setDepth(301);
-            this.add.text(cx, currentY + 75, t('masterTitle'), { fontSize: '24px', fontStyle: 'bold', color: '#00ffff' }).setOrigin(0.5).setDepth(301);
-            this.time.delayedCall(500, () => {
-                this.createLevelClearButtons(cx, cy + 145);
-            });
-            return;
-        }
+        if (message) uiText(this, cx, top + 146, message, 18, '#e8b8c3').setWordWrapWidth(w - 48).setDepth(302).setScrollFactor(0);
+        this.createLevelClearButtons(cx, cy + panelH / 2 - uiUnit(this, 88));
+    }
 
-        if (newlyClaimedReward) {
-            this.add.text(cx, currentY + 20, t('levelRewardHeart'), { fontSize: '32px', fontStyle: 'bold', color: '#ff5555' }).setOrigin(0.5).setDepth(301);
-            const oldMax = ProgressionManager.getMaxHP() - this.levelDef.reward!.value;
-            const newMax = ProgressionManager.getMaxHP();
-            const heartText = this.add.text(cx, currentY + 60, isTraditionalChinese() ? `${oldMax} 愛心` : `${oldMax} HEARTS`, { fontSize: '32px' }).setOrigin(0.5).setDepth(301);
-            
-            this.time.delayedCall(800, () => {
-                heartText.setText(t('heartsTransition', { old: oldMax, new: newMax }));
-                this.tweens.add({
-                    targets: heartText,
-                    scale: 1.5,
-                    yoyo: true,
-                    duration: 150,
-                    onComplete: () => {
-                        if (newlyUnlocked) {
-                            this.time.delayedCall(400, () => {
-                                this.add.text(cx, currentY + 110, t('levelUnlocked', { next: this.levelDef.nextLevelId }), { fontSize: '36px', fontStyle: 'bold', color: '#00ffff' }).setOrigin(0.5).setDepth(301);
-                                this.createLevelClearButtons(cx, cy + 185);
-                            });
-                        } else {
-                            this.createLevelClearButtons(cx, cy + 185);
-                        }
-                    }
-                });
-            });
-        } else {
-            if (newlyUnlocked) {
-                this.add.text(cx, currentY + 30, t('levelUnlocked', { next: this.levelDef.nextLevelId }), { fontSize: '36px', fontStyle: 'bold', color: '#00ffff' }).setOrigin(0.5).setDepth(301);
-            }
-            this.time.delayedCall(500, () => {
-                this.createLevelClearButtons(cx, cy + 140);
-            });
-        }
+    private createEndPanel(cx: number, cy: number, width: number, height: number) {
+        this.add.rectangle(cx, cy, this.scale.width, this.scale.height, ARCADE.background, 0.88).setDepth(300).setScrollFactor(0);
+        roundedPanel(this, cx, cy, width, height).setDepth(301).setScrollFactor(0);
+    }
+
+    private fixedEndButton(cx: number, cy: number, label: string, onPress: () => void, name: string, primary = true) {
+        const button = arcadeButton(this, cx, cy, Math.min(this.scale.width - 64, uiUnit(this, 300)), label, onPress, name, primary);
+        button.art.setDepth(302).setScrollFactor(0);
+        button.bg.setDepth(303).setScrollFactor(0);
+        button.label.setDepth(304).setScrollFactor(0);
     }
 
     createLevelClearButtons(cx: number, cy: number) {
+        const row = uiUnit(this, 64);
         if (!this.levelDef.nextLevelId) {
-            const playAgainBtn = this.add.text(cx, cy - 30, t('playAgain'), {
-                fontSize: '32px', backgroundColor: '#555555', padding: { x: 20, y: 10 }
-            }).setOrigin(0.5).setDepth(301).setInteractive({ useHandCursor: true });
-            playAgainBtn.setName('playAgainBtn');
-            
-            playAgainBtn.on('pointerdown', () => {
-                this.scene.start('PrepScene', { levelId: 4 });
-            });
-
-            const levelSelectBtn = this.add.text(cx, cy + 50, t('levelSelect'), {
-                fontSize: '32px', backgroundColor: '#0055aa', padding: { x: 20, y: 10 }
-            }).setOrigin(0.5).setDepth(301).setInteractive({ useHandCursor: true });
-            levelSelectBtn.setName('levelSelectBtn');
-            
-            levelSelectBtn.on('pointerdown', () => {
-                this.scene.start('MenuScene');
-            });
+            this.fixedEndButton(cx, cy - row / 2, t('playAgain'), () => this.scene.start('PrepScene', { levelId: 4 }), 'playAgainBtn');
+            this.fixedEndButton(cx, cy + row / 2, t('levelSelect'), () => this.scene.start('MenuScene'), 'levelSelectBtn', false);
             return;
         }
-
-        if (this.levelDef.nextLevelId && ProgressionManager.getHighestUnlockedLevel() >= this.levelDef.nextLevelId) {
-            const nextBtn = this.add.text(cx, cy - 60, t('nextLevel'), {
-                fontSize: '32px', backgroundColor: '#00aa00', padding: { x: 20, y: 10 }
-            }).setOrigin(0.5).setDepth(301).setInteractive({ useHandCursor: true });
-            nextBtn.setName('nextBtn');
-            
-            nextBtn.on('pointerdown', () => {
-                this.scene.start('PrepScene', { levelId: this.levelDef.nextLevelId });
-            });
+        if (ProgressionManager.getHighestUnlockedLevel() >= this.levelDef.nextLevelId) {
+            this.fixedEndButton(cx, cy - row, t('nextLevel'), () => this.scene.start('PrepScene', { levelId: this.levelDef.nextLevelId }), 'nextBtn');
         }
-
-        const replayBtn = this.add.text(cx, cy, t('replayLevel'), {
-            fontSize: '24px', backgroundColor: '#555555', padding: { x: 15, y: 8 }
-        }).setOrigin(0.5).setDepth(301).setInteractive({ useHandCursor: true });
-        replayBtn.setName('replayBtn');
-        
-        replayBtn.on('pointerdown', () => {
-            this.scene.start('PrepScene', { levelId: this.levelId });
-        });
-
-        const menuBtn = this.add.text(cx, cy + 60, t('menu'), {
-            fontSize: '24px', backgroundColor: '#0055aa', padding: { x: 15, y: 8 }
-        }).setOrigin(0.5).setDepth(301).setInteractive({ useHandCursor: true });
-        menuBtn.setName('menuBtn');
-        
-        menuBtn.on('pointerdown', () => {
-            this.scene.start('MenuScene');
-        });
+        this.fixedEndButton(cx, cy, t('replayLevel'), () => this.scene.start('PrepScene', { levelId: this.levelId }), 'replayBtn', false);
+        this.fixedEndButton(cx, cy + row, t('menu'), () => this.scene.start('MenuScene'), 'menuBtn', false);
     }
 
     gameOver() {
@@ -1333,45 +1338,34 @@ export class GameScene extends Phaser.Scene {
         if (this.scoreSubmitted) return false;
         this.scoreSubmitted = true;
         const s = this.hud.getScore();
-        const b = parseInt(localStorage.getItem('bestScore') || '0', 10);
-        if (s > b) localStorage.setItem('bestScore', s.toString());
+        try {
+            const b = parseInt(localStorage.getItem('bestScore') || '0', 10);
+            if (s > b) localStorage.setItem('bestScore', s.toString());
+        } catch { /* Session play and the end screen remain available without storage. */ }
         this.isNewBest = ProgressionManager.submitScore(this.levelId, s);
         this.hud.setBestScore(ProgressionManager.getBestScore(this.levelId));
         return this.isNewBest;
     }
 
     showEndScreen(title: string, color: string) {
-        if (this.worldCrown) this.worldCrown.setVisible(false);
-
-        const cx = this.cameras.main.scrollX + this.scale.width / 2;
-        const cy = this.cameras.main.scrollY + this.scale.height / 2;
-
-        const bg = this.add.graphics();
-        bg.fillStyle(0x000000, 0.8);
-        bg.fillRect(this.cameras.main.scrollX, this.cameras.main.scrollY, this.scale.width, this.scale.height);
-        bg.setDepth(300);
-
+        this.worldCrown?.setVisible(false);
+        this.cameras.main.stopFollow();
+        this.cameras.main.setZoom(1);
+        const w = this.scale.width, h = this.scale.height, cx = w / 2, cy = h / 2;
+        const panelH = Math.min(h - 28, uiUnit(this, 400));
+        this.createEndPanel(cx, cy, Math.min(w - 28, uiUnit(this, 520)), panelH);
+        const top = cy - panelH / 2;
         const titleText = title === 'GAME OVER' ? t('gameOver') : (title === 'VICTORY' ? t('victory') : title);
-        this.add.text(cx, cy - 110, titleText, { fontSize: '64px', fontStyle: 'bold', color }).setOrigin(0.5).setDepth(301);
-        this.add.text(cx, cy - 35, t('finalValue', { value: this.player.value }), { fontSize: '24px', color: '#fff' }).setOrigin(0.5).setDepth(301);
-        this.add.text(cx, cy + 5, `${t('score')}: ${this.hud.getScore()}`, { fontSize: '24px', color: '#fff' }).setOrigin(0.5).setDepth(301);
-        this.add.text(cx, cy + 38, `${t('best')}: ${ProgressionManager.getBestScore(this.levelId)}`, { fontSize: '20px', color: '#aaaaaa' }).setOrigin(0.5).setDepth(301);
-
-        if (this.isNewBest) {
-            this.add.text(cx, cy + 68, t('newBest'), { fontSize: '22px', fontStyle: 'bold', color: '#ffd700' }).setOrigin(0.5).setDepth(301);
-        }
-
-        const btn = this.add.text(cx, cy + (this.isNewBest ? 116 : 100), t('playAgain'), {
-            fontSize: '32px', backgroundColor: '#0055aa', padding: { x: 20, y: 10 }
-        }).setOrigin(0.5).setDepth(301).setInteractive({ useHandCursor: true });
-        btn.setName('playAgainBtn');
-
-        btn.on('pointerdown', () => {
-            this.scene.start('PrepScene', { levelId: this.levelId });
-        });
+        uiText(this, cx, top + 48, titleText, 30, color).setDepth(302).setScrollFactor(0);
+        uiText(this, cx, top + 105, t('finalValue', { value: this.player.value }), 20).setDepth(302).setScrollFactor(0);
+        uiText(this, cx, top + 145, `${t('score')}: ${this.hud.getScore()}`, 20).setDepth(302).setScrollFactor(0);
+        uiText(this, cx, top + 180, `${t('best')}: ${ProgressionManager.getBestScore(this.levelId)}`, 18, ARCADE.muted).setDepth(302).setScrollFactor(0);
+        if (this.isNewBest) uiText(this, cx, top + 215, t('newBest'), 18, '#ffe198').setDepth(302).setScrollFactor(0);
+        this.fixedEndButton(cx, cy + panelH / 2 - uiUnit(this, 42), t('playAgain'), () => this.scene.start('PrepScene', { levelId: this.levelId }), 'playAgainBtn');
     }
 
     teardown() {
+        this.events.off('postupdate', this.syncMotionTrails, this);
         document.removeEventListener('visibilitychange', this.handleVisibilityChange);
         this.scale.off('resize', this.resize, this);
         this.leaderboardTimer?.remove();
@@ -1380,6 +1374,14 @@ export class GameScene extends Phaser.Scene {
         this.bossIndicator?.destroy();
         this.enemies.forEach(e => e.destroy());
         this.clearOrbs();
+        this.freeOrbs.forEach(orb => orb.destroy());
+        this.freeOrbs = [];
+        this.previousHeads.clear();
+        this.bodyCollisions.reset();
+        this.particles.forEach(particle => particle.destroy());
+        this.particles.clear();
+        this.recoilEchoes.forEach(echo => echo.destroy());
+        this.recoilEchoes.clear();
         this.player.destroy();
         this.boss?.destroy();
         this.ultimateBoss?.destroy();
@@ -1399,6 +1401,7 @@ export class GameScene extends Phaser.Scene {
     getObstacleBounds(): RectBounds[] {
         const list: RectBounds[] = [];
         if (this.hud) {
+            list.push(this.hud.getValueBounds());
             list.push(this.hud.getHPBounds());
             list.push(this.hud.getScoreBounds());
             list.push(this.hud.getBestBounds());
@@ -1419,6 +1422,7 @@ export class GameScene extends Phaser.Scene {
     getLayoutBounds() {
         return {
             hp: this.hud.getHPBounds(),
+            value: this.hud.getValueBounds(),
             score: this.hud.getScoreBounds(),
             best: this.hud.getBestBounds(),
             magnetHUD: this.hud.getMagnetHUDBounds(),

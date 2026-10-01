@@ -114,7 +114,7 @@ test('full load: 38 long AI + long player +160 circles + magnet + boss for five 
    fps:{observedFrames:rawFrames.length,fromObservedIntervals:rawFrames.length?rawFrames.length*1000/rawFrames.reduce((sum,frame)=>sum+frame,0):null,phaserSamples:samples.map(s=>({elapsedMs:s.elapsed,fps:s.fps}))},
    collisionWork:{maxCandidateChecks:latest?.candidateCheckMax??0,measurement:'Maximum actual swept-capsule candidate checks from every postupdate frame; AI-to-AI pairs are excluded'},
    frameBounds:latest?.frameBounds??null,
-   objectStability:{caps:latest?.decorCaps??null,measurement:'Subtract tracked particle and recoil-echo sets, the single owned magnet graphic, and source-defined depth-200 temporary alert texts; circle pool and snake sprite capacities remain part of the stable base',stableChildren:samples.map(s=>({elapsedMs:s.elapsed,count:s.stableChildren})),childSpread:samples.length?Math.max(...samples.map(s=>s.children))-Math.min(...samples.map(s=>s.children)):null},
+   objectStability:{caps:latest?.decorCaps??null,measurement:'Subtract tracked particle and recoil-echo sets, the single owned magnet graphic, and non-HUD depth-200 temporary alert texts; all five identity-tracked HUD Texts, circle pool and snake sprite capacities remain part of the stable base',stableChildren:samples.map(s=>({elapsedMs:s.elapsed,count:s.stableChildren})),childSpread:samples.length?Math.max(...samples.map(s=>s.children))-Math.min(...samples.map(s=>s.children)):null},
    boundsSummary:{measurement:'Ten-second diagnostic head snapshots; continuous bounds acceptance is recorded separately in frameBounds',playerOutOfWorldSamples:samples.filter(s=>s.bounds.playerOutOfWorld).length,enemyOutOfWorldSamples:samples.filter(s=>s.bounds.enemyOutOfWorldIds.length>0).length,ultimateBossOutOfWorldSamples:samples.filter(s=>s.bounds.ultimateBossOutOfWorld).length,playerMaxAbsX:maxAbs(samples.map(s=>Math.abs(s.player.x))),playerMaxAbsY:maxAbs(samples.map(s=>Math.abs(s.player.y))),enemyMaxAbsX:maxAbs(samples.map(s=>Math.max(Math.abs(s.bounds.enemyX.min),Math.abs(s.bounds.enemyX.max)))),enemyMaxAbsY:maxAbs(samples.map(s=>Math.max(Math.abs(s.bounds.enemyY.min),Math.abs(s.bounds.enemyY.max))))},samples};
  };
  const saveReport=()=>fs.writeFileSync(output+'/performance.json',JSON.stringify(makeReport(),null,2));
@@ -162,19 +162,21 @@ test('full load: 38 long AI + long player +160 circles + magnet + boss for five 
     frameBounds:{measurement:'Actual rendered head centers on every postupdate frame; player/AI world edges include collider radius, UltimateBoss keeps its existing 100px safe margin',framesChecked:0,missingUltimateBossFrames:0,player:actorBounds(1180,780,20),enemies:actorBounds(1182,782,18),ultimateBoss:actorBounds(1100,700,55)},
     maintenance:{everyMs:1000,sampleEveryMs:10000,refillTicks:0,circlesSpawned:0,magnetActivations:0,lastMaintenanceElapsedMs:0}};
    let last=now,nextRefill=now,nextSample=now+10000;
+   const permanentHudTexts=new Set([s.hud.hpText,s.hud.valueText,s.hud.scoreText,s.hud.bestScoreText,s.hud.magnetText]);
    const sample=sampleTime=>{
     const range=values=>({min:Math.min(...values),max:Math.max(...values)});
     const p=s.player,enemyHeads=s.enemies.map(e=>({id:e.arenaId,x:e.body.x,y:e.body.y}));
     const boss=s.ultimateBoss?{x:s.ultimateBoss.body.x,y:s.ultimateBoss.body.y}:null;
     const outOfWorld=head=>!Number.isFinite(head.x)||!Number.isFinite(head.y)||Math.abs(head.x)>1200||Math.abs(head.y)>800;
     const children=s.children.list,activeOrbs=s.orbs,freeOrbs=s.freeOrbs,allOrbs=[...activeOrbs,...freeOrbs];
-    // Only spawnBoss/transitionUltimateArena/showReversalText create depth-200
-    // scene Text objects. Their short-lived alerts are counted explicitly.
-    const decor={particles:s.particles.size,recoilEchoes:s.recoilEchoes.size,magnetGraphics:children.includes(s.magnet.auraGraphics)?1:0,temporaryAlerts:children.filter(child=>child.type==='Text'&&child.depth===200).length};
+    // HUD's five permanent Text objects also use depth 200. Keep them in the
+    // fixed base; exclude only non-HUD alert Texts from that base.
+    const decor={particles:s.particles.size,recoilEchoes:s.recoilEchoes.size,magnetGraphics:children.includes(s.magnet.auraGraphics)?1:0,temporaryAlerts:children.filter(child=>child.type==='Text'&&child.depth===200&&!permanentHudTexts.has(child)).length};
+    const permanentHudTextCount=children.filter(child=>permanentHudTexts.has(child)).length;
     const stableChildren=s.children.length-decor.particles-decor.recoilEchoes-decor.magnetGraphics-decor.temporaryAlerts;
     const orbGeometry=orb=>{const position=orb.getCollectionPosition(),sprite=orb.sprite;return[position.x,position.y,sprite.x,sprite.y,sprite.displayWidth,sprite.displayHeight].every(Number.isFinite)&&sprite.displayWidth>0&&sprite.displayHeight>0;};
     data.samples.push({
-     elapsed:sampleTime-data.start,clock:{performanceMs:sampleTime,wallTimestampMs:Date.now(),sceneTimeMs:s.time.now},enemies:s.enemies.length,orbs:s.orbs.length,pool:window.__NUMBER_SNAKE_DEBUG__.getOrbPoolSize(),children:s.children.length,decor,stableChildren,
+     elapsed:sampleTime-data.start,clock:{performanceMs:sampleTime,wallTimestampMs:Date.now(),sceneTimeMs:s.time.now},enemies:s.enemies.length,orbs:s.orbs.length,pool:window.__NUMBER_SNAKE_DEBUG__.getOrbPoolSize(),children:s.children.length,decor,permanentHudTextCount,stableChildren,
      orbPool:{active:activeOrbs.length,free:freeOrbs.length,total:allOrbs.length,uniqueSprites:new Set(allOrbs.map(orb=>orb.sprite)).size,activeSprites:activeOrbs.filter(orb=>orb.sprite.active&&orb.sprite.visible&&!orb.isCollected).length,inactiveFreeSprites:freeOrbs.filter(orb=>!orb.sprite.active&&!orb.sprite.visible&&orb.isCollected).length,finiteGeometry:allOrbs.every(orbGeometry)},
      checks:window.__NUMBER_SNAKE_DEBUG__.getBodyCandidateChecks(),candidateCheckMax:data.candidateCheckMax,fps:s.game.loop.actualFps,boss:!!s.ultimateBoss,state:s.gameState,
      player:{value:p.value,targetLength:p.targetLength,pathLength:p.pathLength,bodySpriteCapacity:p.bodySprites.length,visibleBodySegments:p.bodySprites.filter(sprite=>sprite.visible&&sprite.active).length,x:p.head.x,y:p.head.y},
@@ -240,6 +242,7 @@ test('full load: 38 long AI + long player +160 circles + magnet + boss for five 
   }
   const stableBase=samples[0].stableChildren;
   for(const sample of samples){
+   expect(sample.permanentHudTextCount,'All five permanent HUD Text objects remain in the fixed base').toBe(5);
    expect(sample.decor.particles).toBeLessThanOrEqual(latest.decorCaps.particles);expect(sample.decor.recoilEchoes).toBeLessThanOrEqual(latest.decorCaps.recoilEchoes);expect(sample.decor.magnetGraphics).toBe(1);
    expect(sample.stableChildren,'Fixed children must not grow after subtracting tracked temporary effects').toBe(stableBase);
    if(sample.elapsed>=10000)expect(sample.decor.temporaryAlerts,'Startup alert texts must expire').toBe(0);

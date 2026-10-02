@@ -123,25 +123,42 @@ test('body consumption discards the same eaten AI pending reverse body contact',
   })).toEqual({ recoil: 0, drops: 1 });
 });
 
-test('a recent larger-body rebound does not block eating a different smaller tail', async ({ page }) => {
+test('a recent larger-body rebound does not block eating a different smaller tail', async ({ page }, info) => {
   await boot(page);
   await startGame(page, { value: 15, freeze: true });
-  await page.evaluate(() => window.__PHASER_GAME__.scene.getScene('GameScene').player.teleport(0, 20));
-  await fixtureEnemy(page, { value: 50, x: 200, y: 0, points: [{ x: 200, y: 0 }, { x: -100, y: 0 }] });
-  await expect.poll(() => page.evaluate(() => window.__PHASER_GAME__.scene.getScene('GameScene').bodyRecoilCount)).toBe(1);
   await fixtureEnemy(page, { value: 9, x: 200, y: 100, points: [{ x: 200, y: 100 }, { x: 0, y: 100 }] });
-  const cooling = await page.evaluate(() => {
-    const s = window.__PHASER_GAME__.scene.getScene('GameScene');
-    const cooling = s.bodyCollisions.isCoolingDown('player', s.time.now);
-    s.player.teleport(92, 120);
-    return cooling;
+  await page.evaluate(() => {
+    const s = window.__PHASER_GAME__.scene.getScene('GameScene'), smaller = window.fixtureEnemy;
+    let bouncedAt;
+    const observe = () => {
+      if (bouncedAt === undefined) {
+        if (s.bodyRecoilCount !== 1) return;
+        bouncedAt = s.time.now;
+        window.recentBodyRebound = { cooling: s.bodyCollisions.isCoolingDown('player', bouncedAt), value: s.player.value };
+        // Prepare the second contact in the first actual rebound frame, before browser RPC latency can consume the cooldown.
+        const tip = smaller.getVisiblePath().at(-1);
+        s.player.teleport(tip.x, tip.y + 20);
+      } else if (s.player.value === 24) {
+        window.recentBodyEat = { cooling: s.bodyCollisions.isCoolingDown('player', s.time.now),
+          elapsedMs: s.time.now - bouncedAt, recoil: s.bodyRecoilCount, drops: s.snakeDropCount,
+          value: s.player.value, hp: s.player.hp, score: s.hud.getScore(),
+          headDistance: Math.hypot(smaller.body.x - s.player.head.x, smaller.body.y - s.player.head.y) };
+        s.events.off('postupdate', observe);
+        s.player.teleport(400, 300);
+      }
+    };
+    s.events.on('postupdate', observe);
+    s.player.teleport(0, 20);
   });
-  expect(cooling).toBe(true);
-  await expect.poll(async () => (await sceneState(page)).value).toBe(24);
-  expect(await page.evaluate(() => {
-    const s = window.__PHASER_GAME__.scene.getScene('GameScene');
-    return { cooling: s.bodyCollisions.isCoolingDown('player', s.time.now), recoil: s.bodyRecoilCount, drops: s.snakeDropCount };
-  })).toEqual({ cooling: true, recoil: 1, drops: 1 });
+  await fixtureEnemy(page, { value: 50, x: 200, y: 0, points: [{ x: 200, y: 0 }, { x: -100, y: 0 }] });
+  await expect.poll(() => page.evaluate(() => !!window.recentBodyEat)).toBe(true);
+  const result = await page.evaluate(() => ({ rebound: window.recentBodyRebound, eat: window.recentBodyEat }));
+  await info.attach('eat-during-real-rebound-cooldown', { body: JSON.stringify(result), contentType: 'application/json' });
+  expect(result.rebound).toEqual({ cooling: true, value: 15 });
+  expect(result.eat).toMatchObject({ cooling: true, recoil: 1, drops: 1, value: 24, hp: 3, score: 9 });
+  expect(result.eat.elapsedMs).toBeGreaterThan(0);
+  expect(result.eat.elapsedMs).toBeLessThan(450);
+  expect(result.eat.headDistance).toBeGreaterThan(65);
 });
 
 test('active magnet and native steering meet a smaller tail before head contact without a rebound cycle', async ({ page }, info) => {

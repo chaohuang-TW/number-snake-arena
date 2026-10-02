@@ -12,6 +12,8 @@ export class VirtualJoystick {
     deltaY = 0;
     private pointerId: number | null = null;
     private radius: number;
+    private home = { x: 0, y: 0 };
+    private activationBounds: RectBounds = { x: 0, y: 0, width: 0, height: 0 };
     private readonly cancel = () => this.release();
     constructor(scene: Phaser.Scene) {
         this.scene = scene; this.radius = uiUnit(scene, 56);
@@ -29,19 +31,27 @@ export class VirtualJoystick {
         scene.events.once('shutdown', this.destroy, this);
         this.resize(scene.scale.gameSize);
     }
-    onPointerDown(pointer: Phaser.Input.Pointer) {
+    onPointerDown(pointer: Phaser.Input.Pointer, currentlyOver: Phaser.GameObjects.GameObject[] = []) {
         const fromTouch = (pointer.event as PointerEvent | undefined)?.pointerType === 'touch' || pointer.wasTouch;
         if (!isTouchCapableDevice() && !fromTouch) return;
-        // Keep a fixed lower-left anchor and never capture menu, ranking, or ability taps.
-        const distance = Math.hypot(pointer.x - this.base.x, pointer.y - this.base.y);
-        if (this.pointerId === null && distance <= this.radius * 1.35) {
+        // A thumb can start anywhere in the left play area, not just on the
+        // resting circle. Keep HUD/buttons and other fingers out of this drag.
+        const area = this.activationBounds;
+        if (currentlyOver.some(object => object !== this.base)) return;
+        if (this.pointerId === null && pointer.x >= area.x && pointer.x < area.x + area.width
+            && pointer.y >= area.y && pointer.y < area.y + area.height) {
             this.active = true; this.pointerId = pointer.id;
+            this.base.setPosition(pointer.x, pointer.y);
             this.updateDelta(pointer.x, pointer.y);
         }
     }
     onPointerMove(pointer: Phaser.Input.Pointer) { if (this.active && pointer.id === this.pointerId && pointer.isDown) this.updateDelta(pointer.x, pointer.y); }
     onPointerUp(pointer: Phaser.Input.Pointer) { if (pointer.id === this.pointerId) this.release(); }
-    private release() { this.active = false; this.pointerId = null; this.deltaX = 0; this.deltaY = 0; this.thumb.setPosition(this.base.x, this.base.y); }
+    private release() {
+        this.active = false; this.pointerId = null; this.deltaX = 0; this.deltaY = 0;
+        this.base.setPosition(this.home.x, this.home.y);
+        this.thumb.setPosition(this.home.x, this.home.y);
+    }
     updateDelta(px: number, py: number) {
         const dx = px - this.base.x, dy = py - this.base.y, distance = Math.hypot(dx, dy);
         const ratio = distance > this.radius ? this.radius / distance : 1;
@@ -49,8 +59,13 @@ export class VirtualJoystick {
         this.deltaX = dx * ratio / this.radius; this.deltaY = dy * ratio / this.radius;
     }
     resize(gameSize: Phaser.Structs.Size) {
-        const layout = arenaUiLayout(gameSize.width, gameSize.height, safeInsets(this.scene));
-        this.base.setPosition(layout.joystick.x, layout.joystick.y);
+        const safe = safeInsets(this.scene);
+        const layout = arenaUiLayout(gameSize.width, gameSize.height, safe);
+        this.home = { x: layout.joystick.x, y: layout.joystick.y };
+        const top = layout.top + 179;
+        this.activationBounds = { x: safe.left, y: top,
+            width: Math.max(0, gameSize.width / 2 - safe.left),
+            height: Math.max(0, gameSize.height - safe.bottom - top) };
         this.release();
         this.base.setVisible(isTouchCapableDevice()); this.thumb.setVisible(isTouchCapableDevice());
     }

@@ -86,8 +86,8 @@ test('AP,AQ,AR,new F: magnet eligibility, time, real enemy/orb attraction and re
  expect(velocities.find(e=>e.value===9).velocity.x).toBeGreaterThan(200);expect(velocities.find(e=>e.value===10).velocity.x).toBeGreaterThan(-200);expect(velocities.find(e=>e.value===11).velocity.y).toBeGreaterThan(-200);
  await expect.poll(async()=>(await sceneState(page)).value).toBeGreaterThanOrEqual(19);
  await expect.poll(()=>page.evaluate(()=>window.__NUMBER_SNAKE_DEBUG__.getMagnetState()),{timeout:13000}).toBe('COOLDOWN');
- await startGame(page,{value:100,freeze:true});await fixtureEnemy(page,{value:50,x:160,y:0,points:[{x:160,y:0},{x:0,y:0},{x:-200,y:0}]});await page.keyboard.press('m');
- await expect.poll(async()=>(await sceneState(page)).recoil,{intervals:[10,20]}).toBe(true);
+ await startGame(page,{value:100,freeze:true});await seedPlayer(page,[{x:200,y:0},{x:-400,y:0}]);await fixtureEnemy(page,{value:50,x:0,y:20});await page.keyboard.press('m');
+ await expect.poll(()=>page.evaluate(()=>window.fixtureEnemy.isRecoiling),{intervals:[10,20]}).toBe(true);
  expect(await page.evaluate(()=>window.__PHASER_GAME__.scene.getScene('GameScene').magnet.isEnemySuppressed(window.fixtureEnemy.arenaId))).toBe(true);
 });
 

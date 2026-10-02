@@ -8,7 +8,7 @@ export const en: Record<TranslationKey, string> = {
     bestLabel: 'BEST: ',
     start: 'START',
     locked: '🔒 LOCKED',
-    tutorialText: 'Eat smaller. Avoid equal or larger heads.\nBodies bounce you away!',
+    tutorialText: 'Eat smaller heads, bodies and tails.\nEqual/larger: avoid heads; bodies bounce.',
     langZh: '繁中',
     langEn: 'EN',
 
@@ -110,7 +110,7 @@ export const en: Record<TranslationKey, string> = {
     enabled: 'On',
     disabled: 'Off',
     playerValue: 'Value',
-    bodyBounce: 'Bodies bounce you away',
+    bodyBounce: 'Equal/larger bodies bounce',
     edibleHint: 'Eat smaller · Avoid equal',
     controlsTouch: 'Left: move · Right: boost / magnet',
     controlsDesktop: 'Arrows / mouse: move · Space: boost · M: magnet',

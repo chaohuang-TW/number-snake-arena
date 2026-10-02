@@ -6,8 +6,7 @@ test('Z,AA: population cap, safe boundary and a fresh ordinary AI native boost c
  await boot(page);await startGame(page,{value:50,freeze:true});await page.evaluate(()=>{const s=window.__PHASER_GAME__.scene.getScene('GameScene');for(let i=0;i<80;i++)s.spawnEnemy();});expect((await sceneState(page)).enemies).toBeLessThanOrEqual(38);
  const pos=await page.evaluate(()=>window.__NUMBER_SNAKE_DEBUG__.getEnemies().map(e=>({x:e.body.x,y:e.body.y})));for(const e of pos){expect(Math.abs(e.x)).toBeLessThanOrEqual(1160);expect(Math.abs(e.y)).toBeLessThanOrEqual(760)}
  // A new prey starts outside head/assist contact, inside FLEE range, with no
- // already deployed tail shielding its head. Catching a mature tail directly
- // from behind is no longer guaranteed by the v0.7.0 body-recoil rules.
+ // already deployed tail, so this still exercises native boost pursuit of a head.
  await startGame(page,{value:50,freeze:true});
  await fixtureEnemy(page,{value:25,x:105,y:0});
  await page.evaluate(()=>{

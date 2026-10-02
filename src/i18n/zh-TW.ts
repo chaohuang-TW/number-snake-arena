@@ -6,7 +6,7 @@ export const zhTW = {
     bestLabel: '最高分：',
     start: '開始',
     locked: '🔒 未解鎖',
-    tutorialText: '吃小數字長大，避開相等或更大的蛇頭！\n碰到身體會彈開！',
+    tutorialText: '小蛇頭、身體、尾巴都能吃！\n相等或更大：避開頭，碰身體會彈開。',
     langZh: '繁中',
     langEn: 'EN',
 
@@ -108,7 +108,7 @@ export const zhTW = {
     enabled: '開',
     disabled: '關',
     playerValue: '數值',
-    bodyBounce: '碰到身體會彈開',
+    bodyBounce: '相等或更大的身體會彈開',
     edibleHint: '小數字可吃 · 相等要避開',
     controlsTouch: '左手移動 · 右手加速／磁力',
     controlsDesktop: '方向鍵／滑鼠移動 · 空白鍵加速 · M 磁力',

@@ -1,8 +1,11 @@
+import { isEdible } from '../utils/gameRules';
+
 /** Gameplay geometry uses the visible distance path, never decorative sprite counts. */
 export interface BodyPoint { x: number; y: number }
 export interface BodyActor {
     id: string;
     kind: 'player' | 'enemy' | 'boss';
+    value: number;
     head: BodyPoint;
     previousHead: BodyPoint;
     headRadius: number;
@@ -24,6 +27,11 @@ const sub = (a: BodyPoint, b: BodyPoint): BodyPoint => ({ x: a.x - b.x, y: a.y -
 const dot = (a: BodyPoint, b: BodyPoint) => a.x * b.x + a.y * b.y;
 const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
 const finite = (p: BodyPoint) => Number.isFinite(p.x) && Number.isFinite(p.y);
+
+export function bodyContactOutcome(actor: Pick<BodyActor, 'kind' | 'value'>, owner: Pick<BodyActor, 'kind' | 'value'>): 'eat' | 'recoil' | null {
+    if (actor.kind === owner.kind || actor.kind === 'boss' || owner.kind === 'boss') return null;
+    return actor.kind === 'player' && isEdible(actor.value, owner.value) ? 'eat' : 'recoil';
+}
 
 export function closestPointOnSegment(point: BodyPoint, a: BodyPoint, b: BodyPoint): BodyPoint {
     const delta = sub(b, a);
@@ -110,6 +118,7 @@ export class BodyCollisionSystem {
 
     detect(actors: readonly BodyActor[], time: number, headResolved: ReadonlySet<string> = new Set()): BodyContact[] {
         const activeIds = new Set(actors.filter(actor => actor.active).map(actor => actor.id));
+        const byId = new Map(actors.map(actor => [actor.id, actor]));
         for (const id of this.cooldownUntil.keys()) if (!activeIds.has(id)) this.cooldownUntil.delete(id);
         const cells = new Map<string, Capsule[]>();
         const size = Math.max(1, this.options.spatialCellSize);
@@ -125,20 +134,23 @@ export class BodyCollisionSystem {
         const result: BodyContact[] = [];
         this.lastCandidateChecks = 0;
         for (const actor of actors) {
-            if (!actor.active || actor.kind === 'boss' || headResolved.has(actor.id) || this.isCoolingDown(actor.id, time)) continue;
+            if (!actor.active || actor.kind === 'boss' || headResolved.has(actor.id)) continue;
             const candidates = new Set<Capsule>();
             const radius = actor.headRadius + this.options.sweptRadiusPadding;
             visit(Math.min(actor.previousHead.x, actor.head.x) - radius, Math.min(actor.previousHead.y, actor.head.y) - radius,
                 Math.max(actor.previousHead.x, actor.head.x) + radius, Math.max(actor.previousHead.y, actor.head.y) + radius,
                 key => { for (const cap of cells.get(key) ?? []) if (cap.ownerId !== actor.id && cap.kind !== actor.kind) candidates.add(cap); });
-            // Stable order makes simultaneous multi-segment/owner contact deterministic.
-            const ordered = [...candidates].sort((a, b) => a.ownerId.localeCompare(b.ownerId) || a.order - b.order);
+            const canEat = (cap: Capsule) => bodyContactOutcome(actor, byId.get(cap.ownerId)!) === 'eat';
+            // Prefer a smaller touching snake over a blocking larger body, then keep stable order.
+            const ordered = [...candidates].sort((a, b) => Number(canEat(b)) - Number(canEat(a)) || a.ownerId.localeCompare(b.ownerId) || a.order - b.order);
             for (const cap of ordered) {
+                if (!canEat(cap) && this.isCoolingDown(actor.id, time)) continue;
                 this.lastCandidateChecks++;
                 const contact = sweptCapsuleContact(actor, cap, this.options.sweptRadiusPadding);
                 if (!contact) continue;
                 result.push(contact);
-                this.cooldownUntil.set(actor.id, time + this.options.detectionCooldownMs);
+                // Recoil limits repeated bounces; eating must not delay the next smaller snake.
+                if (!canEat(cap)) this.cooldownUntil.set(actor.id, time + this.options.detectionCooldownMs);
                 break;
             }
         }

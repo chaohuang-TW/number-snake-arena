@@ -20,7 +20,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 844, height: 390 }
           boost: s.hud.isBoostPressed, magnet: s.hud.isMagnetPressed };
       });
       const home = (await read()).base;
-      const anchor = { x: Math.round(viewport.width * .35), y: Math.round(viewport.height * .65), id: 1 };
+      const anchor = { x: viewport.width / 2 - 5, y: viewport.height - 56, id: 1 };
       expect(Math.hypot(anchor.x - home.x, anchor.y - home.y)).toBeGreaterThan(100);
       // Wait for the live canvas before one native touch starts away from the old circle.
       await expect(page.locator('canvas')).toBeVisible();

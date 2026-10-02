@@ -306,6 +306,8 @@ test('LV6 CO3,G: real denied preference/cosmetic Storage reads and writes keep t
     });
     try {
         await clickButton(page, 'MenuScene', 'customizeBtn');
+        await page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('CustomizeScene')
+            && window.__PHASER_GAME__.scene.getScene('CustomizeScene').styleNameText?.active);
         expect(await page.evaluate(() => window.__PHASER_GAME__.scene.getScene('CustomizeScene').styleNameText.text)).toBe('經典圓眼');
         await clickButton(page, 'CustomizeScene', 'nextSkinBtn');
         await clickButton(page, 'CustomizeScene', 'equipSkinBtn');

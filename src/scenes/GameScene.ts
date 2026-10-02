@@ -22,7 +22,7 @@ import { t } from '../i18n';
 import { UltimateBoss } from '../entities/UltimateBoss';
 import { LuckyWheelOverlay } from '../ui/LuckyWheelOverlay';
 import { type WheelReward, applyWheelReward } from '../utils/luckyWheel';
-import { BodyCollisionSystem, type BodyActor, type BodyPoint } from '../systems/BodyCollision';
+import { BodyCollisionSystem, bodyContactOutcome, type BodyActor, type BodyPoint } from '../systems/BodyCollision';
 import { calculateBodyRecoil } from '../systems/Recoil';
 import { createSnakeOrbDrops } from '../systems/OrbRewards';
 import { EnemySkinSelector, VisualPreferencesManager } from '../models/VisualPreferences';
@@ -605,20 +605,28 @@ export class GameScene extends Phaser.Scene {
     private resolveBodyContacts(time: number, headResolved: Set<string>) {
         const playerPoint = { x: this.player.head.x, y: this.player.head.y };
         const playerPath = this.player.getVisiblePath();
-        const actors: BodyActor[] = [{ id: 'player', kind: 'player', head: playerPoint,
+        const actors: BodyActor[] = [{ id: 'player', kind: 'player', value: this.player.value, head: playerPoint,
             previousHead: playerPath.length > 1 ? this.previousHeads.get('player') ?? playerPoint : playerPoint,
             headRadius: 20, path: playerPath, active: this.player.head.active }];
         for (const enemy of this.enemies) {
             const point = { x: enemy.body.x, y: enemy.body.y };
-            actors.push({ id: enemy.arenaId, kind: 'enemy', head: point,
+            actors.push({ id: enemy.arenaId, kind: 'enemy', value: enemy.value, head: point,
                 previousHead: this.previousHeads.get(enemy.arenaId) ?? point,
                 headRadius: 18, path: enemy.getVisiblePath(), active: enemy.body.active });
         }
         const hw = GameBalance.world.width / 2, hh = GameBalance.world.height / 2;
         for (const contact of this.bodyCollisions.detect(actors, time, headResolved)) {
             const snake = contact.actorId === 'player' ? this.player : this.enemies.find(enemy => enemy.arenaId === contact.actorId);
-            if (!snake) continue;
+            const owner = contact.ownerId === 'player' ? this.player : this.enemies.find(enemy => enemy.arenaId === contact.ownerId);
+            if (!snake || !owner) continue;
             const head = snake instanceof PlayerSnake ? snake.head : snake.body;
+            const ownerHead = owner instanceof PlayerSnake ? owner.head : owner.body;
+            if (!head.active || !ownerHead.active) continue;
+            if (bodyContactOutcome({ kind: snake instanceof PlayerSnake ? 'player' : 'enemy', value: snake.value },
+                { kind: owner instanceof PlayerSnake ? 'player' : 'enemy', value: owner.value }) === 'eat' && owner instanceof NumberEnemy) {
+                this.handleEnemyCollision(owner, this.enemies.indexOf(owner), time);
+                continue;
+            }
             const recoil = calculateBodyRecoil(head, contact,
                 { minX: -hw + 40, minY: -hh + 40, maxX: hw - 40, maxY: hh - 40 },
                 GameBalance.bodyCollision.separationPx, GameBalance.bodyCollision.maxImpulsePx);

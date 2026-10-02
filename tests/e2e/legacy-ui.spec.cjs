@@ -100,7 +100,7 @@ test('LUI1 BN,BL,BY,N,AD,BA,X,AW: rendered zh-TW pages, legacy best, desktop con
     const menu = await visibleTexts(page, 'MenuScene');
     includesTexts(menu, ['數字蛇競技場', '關卡選擇', '第 1 關', '第 2 關', '第 3 關', '第 4 關', '數位格線', '霓虹城市', '熔岩核心', '深空星雲', '最高分：123', '開始'], 'menu');
     expect(menu.filter(text => text.includes('未解鎖'))).toHaveLength(3);
-    expect(await page.evaluate(() => window.__PHASER_GAME__.scene.getScene('MenuScene').tutorialText.text)).toBe('吃小數字長大，避開相等或更大的蛇頭！\n碰到身體會彈開！');
+    expect(await page.evaluate(() => window.__PHASER_GAME__.scene.getScene('MenuScene').tutorialText.text)).toBe('小蛇頭、身體、尾巴都能吃！\n相等或更大：避開頭，碰身體會彈開。');
     const cards = await page.evaluate(() => window.__PHASER_GAME__.scene.getScene('MenuScene').levelCards.map(card => card.list.filter(object => object.type === 'Text').map(object => object.text)));
     for (let index = 0; index < 4; index++) includesTexts(cards[index], [`第 ${index + 1} 關`, `首領 ${(index + 1) * 100}`], `card ${index + 1}`);
     await capture(page, 'LUI1-zh-menu');
@@ -149,7 +149,7 @@ test('LUI2 BX,BY,BM: English tutorial is rendered without CJK and survives a rel
     await boot(page);
     await clickButton(page, 'MenuScene', 'langBtn_en');
     const tutorial = await page.evaluate(() => window.__PHASER_GAME__.scene.getScene('MenuScene').tutorialText.text);
-    expect(tutorial).toBe('Eat smaller. Avoid equal or larger heads.\nBodies bounce you away!');
+    expect(tutorial).toBe('Eat smaller heads, bodies and tails.\nEqual/larger: avoid heads; bodies bounce.');
     expect(tutorial).not.toMatch(cjk);
     includesTexts(await visibleTexts(page, 'MenuScene'), ['NUMBER SNAKE ARENA', 'LEVEL SELECT', 'LEVEL 1', 'LEVEL 2', 'LEVEL 3', 'LEVEL 4', 'LOCKED', 'START'], 'English menu');
     await capture(page, 'LUI2-en-tutorial');

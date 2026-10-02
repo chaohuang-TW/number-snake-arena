@@ -79,7 +79,7 @@ test('LV1 AD,AM,BL,BY: all four drawn cards, locked labels and tutorial fit ten 
             expect(overlaps(card.bounds, layout.tutorial.bounds)).toBe(false);
         }
         expect(layout.tutorial.visible).toBe(true);
-        expect(layout.tutorial.text).toBe('吃小數字長大，避開相等或更大的蛇頭！\n碰到身體會彈開！');
+        expect(layout.tutorial.text).toBe('小蛇頭、身體、尾巴都能吃！\n相等或更大：避開頭，碰身體會彈開。');
         within(layout.tutorial.bounds, width, height, 'tutorial');
         await capture(page, `LV1-menu-${width}x${height}`);
     }
@@ -306,6 +306,8 @@ test('LV6 CO3,G: real denied preference/cosmetic Storage reads and writes keep t
     });
     try {
         await clickButton(page, 'MenuScene', 'customizeBtn');
+        await page.waitForFunction(() => window.__PHASER_GAME__.scene.isActive('CustomizeScene')
+            && window.__PHASER_GAME__.scene.getScene('CustomizeScene').styleNameText?.active);
         expect(await page.evaluate(() => window.__PHASER_GAME__.scene.getScene('CustomizeScene').styleNameText.text)).toBe('經典圓眼');
         await clickButton(page, 'CustomizeScene', 'nextSkinBtn');
         await clickButton(page, 'CustomizeScene', 'equipSkinBtn');
